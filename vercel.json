@@ -1,0 +1,7 @@
+{
+  "framework": null,
+  "installCommand": "cd panel && npm install",
+  "buildCommand": "cd panel && npm run build:demo",
+  "outputDirectory": "panel/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
