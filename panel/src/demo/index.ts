@@ -1,5 +1,5 @@
 import { demoDispatch, sell } from '@/demo/api'
-import { type DemoOrder, world } from '@/demo/world'
+import { addOrder, type DemoOrder, world, ymd } from '@/demo/world'
 
 /**
  * Demo mode: the panel runs with no backend at all, on a café generated in the
@@ -37,6 +37,7 @@ export function startDemoTraffic() {
       const order: DemoOrder = {
         name: `ACC-SINV-${new Date().getFullYear()}-${String(world.serial++).padStart(5, '0')}`,
         date: new Date(),
+        day: ymd(new Date()),
         items,
         total,
         discount: 0,
@@ -49,7 +50,7 @@ export function startDemoTraffic() {
         return_against: null,
         returned: false,
       }
-      world.orders.push(order)
+      addOrder(order)
       sell(order)
     }
     window.setTimeout(ring, 35_000 + Math.random() * 40_000)

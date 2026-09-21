@@ -1,5 +1,5 @@
 import { agentCall } from '@/demo/agent'
-import { type DemoOrder, hms, RECIPES, world, ymd } from '@/demo/world'
+import { addOrder, type DemoOrder, hms, ordersBetween, ordersOfDay, RECIPES, world, ymd } from '@/demo/world'
 
 /**
  * The backend, played by the browser. Every whitelisted method the panel calls
@@ -20,8 +20,7 @@ function periodRange(period = 'today', from?: string, to?: string) {
   return { start: addDays(today, -days), end: today }
 }
 
-const inRange = (order: { date: Date }, start: Date, end: Date) =>
-  order.date >= start && order.date < addDays(end, 1)
+const inRange = (row: { date: Date }, start: Date, end: Date) => row.date >= start && row.date < addDays(end, 1)
 
 function kpis(orders: DemoOrder[], until?: Date) {
   const rows = until ? orders.filter((o) => o.date.getHours() * 60 + o.date.getMinutes() <= until.getHours() * 60 + until.getMinutes()) : orders
@@ -59,8 +58,8 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
     case 'dashboard.summary': {
       const { start, end } = periodRange(args.period, args.from_date, args.to_date)
       const length = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
-      const rows = world.orders.filter((o) => inRange(o, start, end))
-      const prevRows = world.orders.filter((o) => inRange(o, addDays(start, -length), addDays(start, -1)))
+      const rows = ordersBetween(start, end)
+      const prevRows = ordersBetween(addDays(start, -length), addDays(start, -1))
       const isToday = start.getTime() === end.getTime() && start.getTime() === today.getTime()
 
       const byItem = new Map<string, { qty: number; revenue: number }>()
@@ -85,7 +84,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
 
       const trend = Array.from({ length: 30 }, (_, i) => {
         const day = addDays(today, -(29 - i))
-        const dayRows = world.orders.filter((o) => startOfDay(o.date).getTime() === day.getTime())
+        const dayRows = ordersOfDay(day)
         return { date: ymd(day), revenue: sum(dayRows, (o) => o.grand_total), orders: dayRows.length }
       })
 
@@ -132,7 +131,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
         .slice(0, 12)
 
     case 'dashboard.pulse': {
-      const rows = world.orders.filter((o) => startOfDay(o.date).getTime() === today.getTime())
+      const rows = ordersOfDay(today)
       const last = rows.at(-1)
       return {
         orders: rows.filter((o) => !o.is_return).length,
@@ -308,8 +307,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
       const start = args.from_date ? new Date(String(args.from_date)) : null
       const end = args.to_date ? new Date(String(args.to_date)) : null
       const search = String(args.search ?? '').trim()
-      let rows = [...world.orders].reverse()
-      if (start && end) rows = rows.filter((o) => inRange(o, start, end))
+      let rows = start && end ? [...ordersBetween(start, end)].reverse() : [...world.orders].reverse()
       if (search) rows = rows.filter((o) => o.name.includes(search) || o.items.some((i) => i.item_code.includes(search)))
       return rows.slice(Number(args.start ?? 0), Number(args.start ?? 0) + Number(args.limit ?? 40)).map(orderRow)
     }
@@ -359,7 +357,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
         return_against: order.name,
         returned: false,
       }
-      world.orders.push(credit)
+      addOrder(credit)
       return credit.name
     }
 
@@ -418,6 +416,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
       const order: DemoOrder = {
         name: `ACC-SINV-${today.getFullYear()}-${String(world.serial++).padStart(5, '0')}`,
         date: new Date(),
+        day: ymd(new Date()),
         items,
         total,
         discount,
@@ -430,7 +429,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
         return_against: null,
         returned: false,
       }
-      world.orders.push(order)
+      addOrder(order)
       sell(order)
       return { name: order.name, grand_total: order.grand_total }
     }
@@ -438,7 +437,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
     // ------------------------------------------------------------- accounting
     case 'accounting.overview': {
       const { start, end } = periodRange(args.period, args.from_date, args.to_date)
-      const orders = world.orders.filter((o) => inRange(o, start, end))
+      const orders = ordersBetween(start, end)
       const expenses = world.expenses.filter((e) => inRange(e, start, end))
       const income = sum(orders, (o) => o.grand_total)
       const cogs = sum(orders, (o) => o.cogs)
@@ -450,7 +449,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
       const monthly = Array.from({ length: 6 }, (_, i) => {
         const month = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1)
         const next = new Date(month.getFullYear(), month.getMonth() + 1, 1)
-        const rows = world.orders.filter((o) => o.date >= month && o.date < next)
+        const rows = ordersBetween(month, addDays(next, -1))
         const spent = world.expenses.filter((e) => e.date >= month && e.date < next)
         const monthIncome = sum(rows, (o) => o.grand_total)
         const monthExpense = sum(rows, (o) => o.cogs) + sum(spent, (e) => e.amount)
@@ -458,11 +457,11 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
       })
 
       const cashIn = sum(
-        world.orders.filter((o) => o.mode === 'نقدی'),
+        orders.filter((o) => o.mode === 'نقدی'),
         (o) => o.grand_total,
       )
       const cardIn = sum(
-        world.orders.filter((o) => o.mode === 'کارتخوان'),
+        orders.filter((o) => o.mode === 'کارتخوان'),
         (o) => o.grand_total,
       )
 
@@ -538,7 +537,7 @@ function orderRow(order: DemoOrder) {
 }
 
 function shiftRow(shift: (typeof world.shifts)[number]) {
-  const rows = world.orders.filter((o) => o.date >= shift.opening && (!shift.closing || o.date <= shift.closing))
+  const rows = ordersOfDay(shift.date).filter((o) => o.date >= shift.opening && (!shift.closing || o.date <= shift.closing))
   const cash = sum(
     rows.filter((o) => o.mode === 'نقدی'),
     (o) => o.grand_total,

@@ -1,4 +1,4 @@
-import { hms, world, ymd } from '@/demo/world'
+import { hms, ordersBetween, world, ymd } from '@/demo/world'
 
 /**
  * The assistant, offline. Same contract as the backend's agent API — Persian
@@ -33,10 +33,6 @@ function parseAmount(text: string): number | null {
   if (!base) return null
   const scale = match[2] === 'میلیارد' ? 1_000_000_000 : match[2] === 'میلیون' ? 1_000_000 : match[2] === 'هزار' ? 1_000 : 1
   return base * scale * 10 // toman → rial
-}
-
-function ordersBetween(start: Date, end: Date) {
-  return world.orders.filter((o) => o.date >= start && o.date < addDays(end, 1))
 }
 
 function range(text: string) {

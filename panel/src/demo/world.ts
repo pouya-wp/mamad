@@ -11,6 +11,8 @@ export type DemoItem = { item_code: string; qty: number; rate: number }
 export type DemoOrder = {
   name: string
   date: Date
+  /** the day this order belongs to (YYYY-MM-DD), so lookups never scan the whole year */
+  day: string
   items: DemoItem[]
   total: number
   discount: number
@@ -84,21 +86,36 @@ const HOUR_WEIGHT: Record<number, number> = {
 
 const pick = <T>(random: () => number, rows: readonly T[]) => rows[Math.floor(random() * rows.length)]
 
-function weighted(random: () => number, weights: Record<number, number>) {
-  const total = Object.values(weights).reduce((sum, w) => sum + w, 0)
-  let roll = random() * total
-  for (const [key, weight] of Object.entries(weights)) {
-    roll -= weight
-    if (roll <= 0) return Number(key)
-  }
-  return Number(Object.keys(weights)[0])
+/** A draw table built once: thousands of orders are generated from it. */
+function table(weights: Record<number, number>) {
+  const keys = Object.keys(weights).map(Number)
+  const cumulative: number[] = []
+  let running = 0
+  for (const key of keys) cumulative.push((running += weights[key]))
+  return { keys, cumulative, total: running }
+}
+
+type Table = ReturnType<typeof table>
+
+function draw(random: () => number, from: Table) {
+  const roll = random() * from.total
+  for (let i = 0; i < from.cumulative.length; i++) if (roll <= from.cumulative[i]) return from.keys[i]
+  return from.keys[0]
 }
 
 export const MENU = DATASET.menu.map((m) => ({ ...m, description: m.description as string | null }))
 export const RECIPES = DATASET.recipes as Record<string, { item_code: string; item_name: string; qty: number; uom: string; rate: number }[]>
 
-/** Selling a drink costs what its recipe costs. */
-const costOf = (code: string) => (RECIPES[code] ?? []).reduce((sum, row) => sum + row.qty * row.rate, 0)
+/** Selling a drink costs what its recipe costs — worked out once per item. */
+const COSTS = new Map<string, number>()
+function costOf(code: string) {
+  let cost = COSTS.get(code)
+  if (cost === undefined) {
+    cost = (RECIPES[code] ?? []).reduce((sum, row) => sum + row.qty * row.rate, 0)
+    COSTS.set(code, cost)
+  }
+  return cost
+}
 
 // the popular end of the menu sells more than the rest
 const POPULARITY: Record<string, number> = {
@@ -111,11 +128,14 @@ const POPULARITY: Record<string, number> = {
 export type World = ReturnType<typeof buildWorld>
 
 export function buildWorld() {
-  const today = startOfDay(new Date())
+  const now = new Date()
+  const today = startOfDay(now)
   const random = rng(Math.floor(today.getTime() / 86400000))
 
   const menuWeights: Record<number, number> = {}
   MENU.forEach((item, index) => (menuWeights[index] = POPULARITY[item.item_code] ?? 3))
+  const menuTable = table(menuWeights)
+  const hourTable = table(HOUR_WEIGHT)
 
   const orders: DemoOrder[] = []
   const shifts: DemoShift[] = []
@@ -129,14 +149,14 @@ export function buildWorld() {
 
     const dayOrders: DemoOrder[] = []
     for (let i = 0; i < count; i++) {
-      const hour = weighted(random, HOUR_WEIGHT)
+      const hour = draw(random, hourTable)
       const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, Math.floor(random() * 60), Math.floor(random() * 60))
-      if (at > new Date()) continue // today stops at the current hour
+      if (at > now) continue // today stops at the current hour
 
       const lines = 1 + Math.floor(random() * 3)
       const items: DemoItem[] = []
       for (let l = 0; l < lines; l++) {
-        const menuItem = MENU[weighted(random, menuWeights)]
+        const menuItem = MENU[draw(random, menuTable)]
         const existing = items.find((row) => row.item_code === menuItem.item_code)
         if (existing) existing.qty += 1
         else items.push({ item_code: menuItem.item_code, qty: 1 + (random() > 0.82 ? 1 : 0), rate: menuItem.rate })
@@ -147,6 +167,7 @@ export function buildWorld() {
       dayOrders.push({
         name: `ACC-SINV-${day.getFullYear()}-${String(serial++).padStart(5, '0')}`,
         date: at,
+        day: ymd(at),
         items,
         total,
         discount,
@@ -281,9 +302,18 @@ export function buildWorld() {
   }
   moves.sort((a, b) => b.date.getTime() - a.date.getTime())
 
+  // one bucket per day: every range query walks days, never the whole year
+  const byDay = new Map<string, DemoOrder[]>()
+  for (const order of orders) {
+    const bucket = byDay.get(order.day)
+    if (bucket) bucket.push(order)
+    else byDay.set(order.day, [order])
+  }
+
   return {
     today,
     orders,
+    byDay,
     purchases,
     expenses,
     shifts,
@@ -301,3 +331,23 @@ export function buildWorld() {
 }
 
 export const world = buildWorld()
+
+/** New orders (till, assistant, the demo's own traffic) join both the list and the day index. */
+export function addOrder(order: DemoOrder) {
+  world.orders.push(order)
+  const bucket = world.byDay.get(order.day)
+  if (bucket) bucket.push(order)
+  else world.byDay.set(order.day, [order])
+}
+
+export const ordersOfDay = (date: Date) => world.byDay.get(ymd(date)) ?? []
+
+/** Every order between two days, inclusive — by day bucket, so cost follows the range, not the history. */
+export function ordersBetween(start: Date, end: Date) {
+  const rows: DemoOrder[] = []
+  for (let day = startOfDay(start); day <= end; day = addDays(day, 1)) {
+    const bucket = world.byDay.get(ymd(day))
+    if (bucket) rows.push(...bucket)
+  }
+  return rows
+}
