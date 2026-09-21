@@ -1,0 +1,16 @@
+# Lowers eth0 MTU inside WSL on every boot.
+# With networkingMode=mirrored, eth0 inherits Hiddify's tun0 MTU (9000) and large
+# TLS packets get dropped, so every HTTPS connection hangs after "Server hello".
+# Install: cp to /etc/systemd/system/ && systemctl enable --now wsl-mtu-fix
+[Unit]
+Description=Set WSL eth0 MTU to 1400 (Hiddify TUN + mirrored networking)
+After=network.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip link set dev eth0 mtu 1400
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

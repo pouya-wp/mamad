@@ -1,0 +1,33 @@
+{
+  "name": "panel",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "dev:demo": "vite --mode demo",
+    "build:demo": "vue-tsc -b --noEmit && vite build --mode demo"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vue-tsc": "^3.3.11"
+  },
+  "dependencies": {
+    "@vueuse/core": "^14.4.0",
+    "dayjs": "^1.11.23",
+    "echarts": "^6.1.0",
+    "jalaliday": "^3.1.1",
+    "lucide-vue-next": "^1.0.0",
+    "pinia": "^4.0.3",
+    "vazirmatn": "^33.0.3",
+    "vue": "^3.5.42",
+    "vue-echarts": "^8.3.0",
+    "vue-router": "^5.3.1"
+  }
+}

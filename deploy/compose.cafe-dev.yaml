@@ -1,0 +1,19 @@
+# Local development override: mounts apps/cafe_app into every bench container so code
+# edits on Windows are live, without building a custom image.
+# The configurator runs `ls -1 apps > sites/apps.txt`, so the mount also registers the app.
+#
+# docker compose -f frappe_docker/pwd.yml -f deploy/compose.cafe-dev.yaml up -d
+x-cafe-app: &cafe-app
+  volumes:
+    - /mnt/c/Users/Pouya/Desktop/PROJECTS/mamad/apps/cafe_app:/home/frappe/frappe-bench/apps/cafe_app
+  environment:
+    PYTHONPATH: /home/frappe/frappe-bench/apps/cafe_app
+
+services:
+  configurator: *cafe-app
+  backend: *cafe-app
+  queue-long: *cafe-app
+  queue-short: *cafe-app
+  scheduler: *cafe-app
+  websocket: *cafe-app
+  frontend: *cafe-app
