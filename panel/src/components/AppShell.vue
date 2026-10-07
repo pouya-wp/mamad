@@ -24,6 +24,7 @@ import LivePulse from '@/components/fx/LivePulse.vue'
 import LiquidBackdrop from '@/components/fx/LiquidBackdrop.vue'
 import OneLogo from '@/components/OneLogo.vue'
 import { DEMO } from '@/demo'
+import { brand } from '@/lib/brand'
 import { jDate, jWeekday } from '@/lib/format'
 import { pageTransitions } from '@/lib/pageTransition'
 import { sound, soundOn } from '@/lib/sound'
@@ -65,7 +66,7 @@ const nav = [
   },
 ]
 
-// ONE CAFE is open 8:30 to 23:30; the header says so, live.
+// The café is open 8:30 to 23:30; the header says so, live.
 const hours = computed(() => {
   const clock = now.value.getHours() + now.value.getMinutes() / 60
   const isOpen = clock >= 8.5 && clock < 23.5
@@ -227,7 +228,7 @@ async function logout() {
           @click="agent.open = true"
         >
           <Sparkles class="size-4 text-one-500" />
-          <span class="hidden flex-1 text-right md:inline">از دستیار One بپرس…</span>
+          <span class="hidden flex-1 text-right md:inline">از {{ brand.assistant }} بپرس…</span>
           <kbd class="hidden rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-ink-500 md:inline" dir="ltr">Ctrl K</kbd>
         </button>
         <button

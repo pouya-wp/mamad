@@ -4,6 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 
 import { get } from '@/lib/api'
 import { jDateTime } from '@/lib/format'
+import { brand, wordmarkParts } from '@/lib/brand'
 import { useAgent } from '@/stores/agent'
 
 /**
@@ -32,7 +33,7 @@ const serial = computed(() => String(100 + new Date().getDate()))
 <template>
   <section class="slip px-6 py-6 sm:px-8">
     <div class="flex items-baseline gap-3">
-      <p class="text-base font-light text-bone" dir="ltr">ON<span class="text-one-500">1</span>E</p>
+      <p class="text-base font-light text-bone" dir="ltr">{{ wordmarkParts[0] }}<span class="text-one-500">{{ wordmarkParts[1] }}</span>{{ wordmarkParts[2] }}</p>
       <p class="flex-1 text-xs text-ink-400">یادداشت دستیار · {{ jDateTime(printedAt) }}</p>
       <p class="num hidden text-[10px] text-ink-500 sm:block" dir="ltr">NO. {{ serial }}</p>
     </div>
@@ -54,7 +55,7 @@ const serial = computed(() => String(100 + new Date().getDate()))
 
     <p class="mt-5 text-center text-[10px] text-ink-500">
       برای پرسیدن، روی هر خط بزن · یا
-      <button class="text-one-400 underline underline-offset-4 hover:text-one-300" @click="agent.open = true">دفتر دستیار</button>
+      <button class="text-one-400 underline underline-offset-4 hover:text-one-300" @click="agent.open = true">{{ brand.assistant }}</button>
       را باز کن
     </p>
   </section>

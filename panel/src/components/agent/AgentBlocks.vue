@@ -2,6 +2,7 @@
 import { Check, LoaderCircle, X } from 'lucide-vue-next'
 
 import ReceiptPaper from '@/components/ReceiptPaper.vue'
+import { brand } from '@/lib/brand'
 import { faNumber, jDate, percent, toman, uom } from '@/lib/format'
 import { type AgentBlock, type ValueFormat, useAgent } from '@/stores/agent'
 
@@ -109,7 +110,7 @@ const stampSparks = Array.from({ length: 10 }, (_, i) => {
           />
           <div class="agent-stamp grid size-[62px] place-items-center rounded-full border-2 text-center" style="border-color: rgba(195, 51, 10, 0.75); color: #c3330a">
             <div class="leading-none">
-              <p class="text-[13px] font-light tracking-tight" dir="ltr">ONe</p>
+              <p class="text-[13px] font-light tracking-tight" dir="ltr">{{ brand.latin }}</p>
               <p class="mt-1 text-[9px] font-black">ثبت شد</p>
             </div>
           </div>

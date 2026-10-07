@@ -1,3 +1,4 @@
+import { brand, wordmarkParts } from '@/lib/brand'
 import { faNumber, toman } from '@/lib/format'
 
 /**
@@ -24,15 +25,15 @@ const ONE = '#ff4f1a'
 
 const font = (weight: number, size: number) => `${weight} ${size}px Vazirmatn, sans-serif`
 
-/** "ONe" with the orange 1 standing in for the stem, centred on x. */
+/** The café's name, with its one orange letter, centred on x. */
 function wordmark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
   ctx.textAlign = 'left'
   ctx.direction = 'ltr'
   ctx.font = font(200, size)
   const parts: [string, string][] = [
-    ['ON', BONE],
-    ['1', ONE],
-    ['E', BONE],
+    [wordmarkParts[0], BONE],
+    [wordmarkParts[1], ONE],
+    [wordmarkParts[2], BONE],
   ]
   const total = parts.reduce((sum, [text]) => sum + ctx.measureText(text).width, 0)
   let cursor = x - total / 2
@@ -102,7 +103,7 @@ export async function drawStory(canvas: HTMLCanvasElement, data: StoryData) {
   ctx.font = font(400, 30)
   ctx.letterSpacing = '14px'
   ctx.fillStyle = MUTED
-  ctx.fillText('ONE CAFE · YAZD', W / 2, 360)
+  ctx.fillText(`${brand.wordmark} · ${brand.cityLatin}`, W / 2, 360)
   ctx.letterSpacing = '0px'
 
   // the headline number
@@ -136,13 +137,13 @@ export async function drawStory(canvas: HTMLCanvasElement, data: StoryData) {
   ctx.direction = 'ltr'
   ctx.font = font(600, 44)
   ctx.fillStyle = ONE
-  ctx.fillText('@one1cafe', W / 2, H - 150)
+  ctx.fillText(brand.handle, W / 2, H - 150)
 
   ctx.direction = 'ltr'
   ctx.font = font(300, 26)
   ctx.letterSpacing = '6px'
   ctx.fillStyle = 'rgba(245,242,236,0.45)'
-  ctx.fillText('ONE GOOD COFFEE, ONE GOOD CAFE', W / 2, H - 90)
+  ctx.fillText(brand.taglineLatin, W / 2, H - 90)
   ctx.letterSpacing = '0px'
 
   grain(ctx)

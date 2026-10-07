@@ -16,6 +16,7 @@ import Segmented from '@/components/Segmented.vue'
 import StatCard from '@/components/StatCard.vue'
 import StoryCard from '@/components/StoryCard.vue'
 import { get } from '@/lib/api'
+import { brand } from '@/lib/brand'
 import { CHART, tooltipBase } from '@/lib/charts'
 import {
   delta,
@@ -75,12 +76,12 @@ const marquee = computed(() => {
   const word = { today: 'امروز', week: 'این هفته', month: 'این ماه' }[period.value]
   const top = data.value?.top_items[0]
   return [
-    'ONE GOOD COFFEE',
+    brand.taglineLatin,
     jDate(new Date()),
-    kpis.value ? `${faNumber(kpis.value.orders)} سفارش ${word}` : 'O N E 1 C A F E',
-    'ONE GOOD CAFE',
-    top ? `محبوب‌ترین ${word}: ${top.item_name}` : 'YAZD · IRAN',
-    'یزد · بلوار دانشگاه · کوچه فرساد',
+    kpis.value ? `${faNumber(kpis.value.orders)} سفارش ${word}` : brand.wordmark,
+    brand.taglineFa,
+    top ? `محبوب‌ترین ${word}: ${top.item_name}` : `${brand.cityLatin} · IRAN`,
+    brand.address,
   ]
 })
 

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import SteamBackground from '@/components/fx/SteamBackground.vue'
 import OneLogo from '@/components/OneLogo.vue'
+import { brand } from '@/lib/brand'
 import { sound } from '@/lib/sound'
 import { useSession } from '@/stores/session'
 
@@ -73,8 +74,8 @@ async function submit() {
         <div class="scale-[2.4]"><OneLogo :size="40" animated with-wordmark /></div>
       </div>
       <div class="absolute right-10 bottom-10 left-10 space-y-2 text-center">
-        <p class="text-sm text-ink-300" dir="ltr">One Good Coffee, One Good Cafe</p>
-        <p class="text-xs text-ink-500">هر روز ۸:۳۰ تا ۲۳:۳۰ · یزد</p>
+        <p class="text-sm text-ink-300" dir="ltr">{{ brand.taglineLatin }}</p>
+        <p class="text-xs text-ink-500">{{ brand.hours }} · {{ brand.city }}</p>
       </div>
     </div>
 
@@ -148,7 +149,7 @@ async function submit() {
           <template v-else>ورود <ArrowLeft class="size-4" /></template>
         </button>
 
-        <p class="mt-10 text-center text-xs text-ink-500">یزد · بلوار دانشگاه · کوچه فرساد</p>
+        <p class="mt-10 text-center text-xs text-ink-500">{{ brand.address }}</p>
       </form>
     </div>
   </div>

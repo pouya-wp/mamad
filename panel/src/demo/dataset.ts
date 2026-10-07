@@ -765,18 +765,18 @@ export const DATASET: Dataset = {
   },
   "suppliers": [
     {
-      "name": "پخش مواد غذایی فرساد",
-      "supplier_name": "پخش مواد غذایی فرساد",
+      "name": "پخش مواد غذایی نیلوفر",
+      "supplier_name": "پخش مواد غذایی نیلوفر",
       "mobile_no": "09130000003"
     },
     {
-      "name": "رست قهوه یزد",
-      "supplier_name": "رست قهوه یزد",
+      "name": "رست قهوه ترنج",
+      "supplier_name": "رست قهوه ترنج",
       "mobile_no": "09130000001"
     },
     {
-      "name": "لبنیات پگاه",
-      "supplier_name": "لبنیات پگاه",
+      "name": "لبنیات رویا",
+      "supplier_name": "لبنیات رویا",
       "mobile_no": "09130000002"
     }
   ],

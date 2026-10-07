@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AgentBlocks from '@/components/agent/AgentBlocks.vue'
 import AgentOrb from '@/components/agent/AgentOrb.vue'
 import TypeText from '@/components/agent/TypeText.vue'
+import { brand } from '@/lib/brand'
 import { sound } from '@/lib/sound'
 import { type ChatMessage, useAgent } from '@/stores/agent'
 import { useSession } from '@/stores/session'
@@ -77,7 +78,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     @click="agent.open = true"
   >
     <AgentOrb :size="34" :state="orbState" />
-    دستیار One
+    {{ brand.assistant }}
   </button>
 
   <!-- The printer -->
@@ -92,7 +93,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <header class="printer-head relative flex items-center gap-3 px-5 pt-4 pb-5">
         <AgentOrb :size="34" :state="orbState" />
         <div class="flex-1">
-          <p class="text-sm font-bold text-bone">دستیار One</p>
+          <p class="text-sm font-bold text-bone">{{ brand.assistant }}</p>
           <p class="text-[11px] text-ink-400">{{ agent.busy ? 'دارم نگاه می‌کنم…' : 'حسابدار و مدیر کافه' }}</p>
         </div>
         <span class="flex items-center gap-1.5 text-[10px] text-ink-400">

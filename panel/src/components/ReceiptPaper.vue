@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 
 import { jDateTime } from '@/lib/format'
+import { brand, receiptFooter, wordmarkParts } from '@/lib/brand'
 
 /**
  * One slip of till paper: torn at both ends, printed line by line, with the café's
@@ -37,10 +38,10 @@ const bars = computed(() => {
 
 <template>
   <div class="paper-slip px-4 py-4 text-[13px] leading-7" :style="{ transform: `rotate(${tilt}deg)`, maxWidth: wide ? undefined : '100%' }">
-    <p class="paper-watermark" dir="ltr">ONe</p>
+    <p class="paper-watermark" dir="ltr">{{ brand.latin }}</p>
 
     <div class="relative flex items-baseline gap-2 text-[10px]">
-      <span class="text-[13px] font-light" dir="ltr">ON<span class="ink-accent">1</span>E</span>
+      <span class="text-[13px] font-light" dir="ltr">{{ wordmarkParts[0] }}<span class="ink-accent">{{ wordmarkParts[1] }}</span>{{ wordmarkParts[2] }}</span>
       <span class="ink-soft flex-1">{{ title }}</span>
       <span class="ink-soft">{{ stamp }}</span>
     </div>
@@ -57,7 +58,7 @@ const bars = computed(() => {
       <div class="barcode" aria-hidden="true">
         <i v-for="(bar, i) in bars" :key="i" :style="{ width: `${bar.w}px`, height: `${bar.h}%` }" />
       </div>
-      <p class="ink-soft mt-1.5 text-center text-[10px]" dir="ltr">{{ code ?? 'ONE CAFE · YAZD' }}</p>
+      <p class="ink-soft mt-1.5 text-center text-[10px]" dir="ltr">{{ code ?? receiptFooter }}</p>
     </div>
   </div>
 </template>

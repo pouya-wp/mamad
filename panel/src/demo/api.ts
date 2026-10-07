@@ -1,4 +1,5 @@
 import { agentCall } from '@/demo/agent'
+import { brand } from '@/lib/brand'
 import { addOrder, type DemoOrder, hms, ordersBetween, ordersOfDay, RECIPES, world, ymd } from '@/demo/world'
 
 /**
@@ -50,8 +51,8 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
     case 'session.boot':
       return {
         csrf_token: 'demo',
-        user: { name: 'demo@one1cafe.ir', full_name: 'مدیر کافه', roles: ['Cafe Manager'], image: null },
-        cafe: { company: 'ONE CAFE', currency: 'IRR', warehouse: 'انبار کافه', pos_profile: 'ONE CAFE', customer: 'مشتری کافه' },
+        user: { name: 'manager@toranjcafe.demo', full_name: 'مدیر کافه', roles: ['Cafe Manager'], image: null },
+        cafe: { company: brand.name, currency: 'IRR', warehouse: 'انبار کافه', pos_profile: brand.name, customer: 'مشتری کافه' },
       }
 
     // -------------------------------------------------------------- dashboard
@@ -113,7 +114,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
             base_grand_total: o.grand_total,
             is_return: o.is_return,
             remarks: `${o.type}${o.table ? ` | ${o.table}` : ''}`,
-            owner: 'demo@one1cafe.ir',
+            owner: 'manager@toranjcafe.demo',
           })),
       }
     }
@@ -494,7 +495,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
           account: e.account,
           account_name: e.account.replace(' - CO', ''),
           amount: e.amount,
-          owner: 'demo@one1cafe.ir',
+          owner: 'manager@toranjcafe.demo',
         }))
 
     case 'accounting.expense_accounts':
@@ -529,7 +530,7 @@ function orderRow(order: DemoOrder) {
     return_against: order.return_against,
     status: order.is_return ? 'Return' : 'Paid',
     remarks: `${order.type}${order.table ? ` | ${order.table}` : ''}`,
-    owner: 'demo@one1cafe.ir',
+    owner: 'manager@toranjcafe.demo',
     owner_name: 'صندوق‌دار کافه',
     payment_modes: [order.mode],
     items_count: order.items.length,

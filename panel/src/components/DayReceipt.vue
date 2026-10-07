@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 import Modal from '@/components/Modal.vue'
 import ReceiptPaper from '@/components/ReceiptPaper.vue'
+import { brand } from '@/lib/brand'
 import { faNumber, jDate, paymentLabel, percent, toman } from '@/lib/format'
 import { sound } from '@/lib/sound'
 import type { DashboardSummary } from '@/lib/types'
@@ -18,7 +19,7 @@ const props = defineProps<{ data: DashboardSummary; label: string }>()
 const kpis = computed(() => props.data.kpis)
 const margin = computed(() => (kpis.value.revenue ? (kpis.value.gross_profit / kpis.value.revenue) * 100 : 0))
 const paymentsTotal = computed(() => props.data.payments.reduce((sum, p) => sum + p.amount, 0))
-const code = computed(() => `ONE-${props.data.range.to.replaceAll('-', '')}`)
+const code = computed(() => `${brand.latin}-${props.data.range.to.replaceAll('-', '')}`)
 
 function print() {
   sound.register()
@@ -73,7 +74,7 @@ function print() {
         </template>
 
         <div class="receipt-rule my-2.5" />
-        <p class="text-center text-[11px]">ممنون که هستی · ONE CAFE</p>
+        <p class="text-center text-[11px]">ممنون که هستی · {{ brand.name }}</p>
       </ReceiptPaper>
     </div>
 

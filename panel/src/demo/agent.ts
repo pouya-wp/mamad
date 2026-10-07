@@ -1,4 +1,5 @@
 import { hms, ordersBetween, world, ymd } from '@/demo/world'
+import { brand } from '@/lib/brand'
 
 /**
  * The assistant, offline. Same contract as the backend's agent API — Persian
@@ -362,7 +363,7 @@ function answer(message: string) {
   if (/فروش|درآمد|امروز|دیروز|هفته|ماه/.test(text)) return salesAnswer(text)
   if (/سلام|خوبی|چه خبر|هستی/.test(text)) {
     return {
-      text: 'سلام! من دستیار One هستم، حساب‌وکتاب کافه با من: می‌توانی وضع فروش و سود را بپرسی، یا فقط بگویی چه پولی دادی و چه خریدی تا برایت ثبتش کنم.',
+      text: `سلام! من ${brand.assistant} هستم، حساب‌وکتاب کافه با من: می‌توانی وضع فروش و سود را بپرسی، یا فقط بگویی چه پولی دادی و چه خریدی تا برایت ثبتش کنم.`,
       blocks: [],
       suggestions: SUGGESTIONS.slice(0, 4),
     }
