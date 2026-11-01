@@ -1,0 +1,28 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["scope", "kind", "posting_date", "amount", "mode_of_payment", "expense_account", "employee", "employee_name", "note", "journal_entry"],
+ "fields": [
+  {"fieldname": "scope", "fieldtype": "Select", "label": "Purchase Desk", "options": "Restaurant\nCafe", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "kind", "fieldtype": "Select", "label": "Kind", "options": "Expense\nAdvance", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "posting_date", "fieldtype": "Date", "label": "Posting Date", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "amount", "fieldtype": "Currency", "label": "Amount", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "mode_of_payment", "fieldtype": "Select", "label": "Payment Method", "options": "Cash\nCredit Card", "reqd": 1},
+  {"fieldname": "expense_account", "fieldtype": "Link", "label": "Expense Account", "options": "Account"},
+  {"fieldname": "employee", "fieldtype": "Link", "label": "Employee", "options": "Cafe Employee"},
+  {"fieldname": "employee_name", "fieldtype": "Data", "label": "Employee Name"},
+  {"fieldname": "note", "fieldtype": "Small Text", "label": "Note"},
+  {"fieldname": "journal_entry", "fieldtype": "Link", "label": "Journal Entry", "options": "Journal Entry", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Cafe",
+ "name": "Cafe Buyer Expense",
+ "permissions": [{"role": "System Manager", "read": 1, "create": 1, "write": 1, "delete": 1, "report": 1, "export": 1}],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "autoname": "format:BEX-{YY}{MM}{DD}-{###}",
+ "naming_rule": "Expression"
+}

@@ -124,7 +124,7 @@ def respond(message):
 
 	# ---- best sellers
 	if _has(text, "پرفروش", "محبوب", "بیشترین فروش", "بیشتر فروش"):
-		rows = run(tools.top_selling(_period(text, "week")))
+		rows = run(tools.top_selling(_period(text, "week")))["items"]
 		if not rows:
 			return reply("در این بازه فروشی ثبت نشده.")
 		return reply(f"«{rows[0]['name']}» با {fa(rows[0]['qty'])} فروش صدرنشینه. لیست کامل 👇")

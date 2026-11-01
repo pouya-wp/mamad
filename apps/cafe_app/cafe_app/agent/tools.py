@@ -5,22 +5,19 @@ Read tools answer immediately. Write tools never touch the books: they create a
 proposal the user has to confirm in the panel (confirm_proposal).
 """
 
+import copy
+
 import frappe
 from frappe import _
-from frappe.utils import add_days, flt, getdate, nowdate
+from frappe.utils import flt, nowdate
 
-from cafe_app.agent.fa import percent, toman
-from cafe_app.api import accounting, dashboard, inventory, menu
+from cafe_app.access import SCOPE_LABELS, buyer_scopes, require_manager
+from cafe_app.agent import reports
+from cafe_app.agent.fa import fa, percent, toman
+from cafe_app.api import accounting, cheques, dashboard, inventory, menu, purchasing
 from cafe_app.cafe_setup import CAFE_EXPENSE_ACCOUNTS
-from cafe_app.utils import get_cafe_settings, period_range
+from cafe_app.utils import get_cafe_settings
 
-PERIOD_LABELS = {
-	"today": "امروز",
-	"yesterday": "دیروز",
-	"week": "۷ روز اخیر",
-	"month": "۳۰ روز اخیر",
-	"year": "یک سال اخیر",
-}
 PAYMENT_MODES = {"cash": "Cash", "card": "Credit Card", "credit": None}
 PAYMENT_LABELS = {"Cash": "نقدی", "Credit Card": "کارتخوان", None: "نسیه"}
 
@@ -42,19 +39,11 @@ UNITS = {
 PROPOSAL_TTL = 60 * 60
 
 
-def _range(period):
-	if period == "yesterday":
-		day = getdate(add_days(nowdate(), -1))
-		return day, day
-	start, end, _prev_start, _prev_end = period_range(period if period in PERIOD_LABELS else "today")
-	return start, end
-
-
 # ---------------------------------------------------------------- read tools
 
 
-def sales_report(period="today"):
-	start, end = _range(period)
+def sales_report(period="today", from_date=None, to_date=None, date=None):
+	start, end, label = reports.span(period, from_date, to_date, date)
 	summary = dashboard.summary(from_date=start, to_date=end)
 	kpis, prev = summary["kpis"], summary["previous"]
 	change = (kpis["revenue"] - prev["revenue"]) / prev["revenue"] * 100 if prev["revenue"] else None
@@ -62,18 +51,19 @@ def sales_report(period="today"):
 
 	return {
 		"data": {
-			"period": PERIOD_LABELS.get(period, period),
+			"range": label,
+			"days": (end - start).days + 1,
 			"revenue_toman": round(kpis["revenue"] / 10),
 			"orders": kpis["orders"],
 			"avg_ticket_toman": round(kpis["avg_ticket"] / 10),
 			"gross_profit_toman": round(kpis["gross_profit"] / 10),
-			"previous_period_revenue_toman": round(prev["revenue"] / 10),
+			"previous_same_length_period_revenue_toman": round(prev["revenue"] / 10),
 			"change_percent": round(change, 1) if change is not None else None,
-			"top_items": [{"name": t.item_name, "qty": t.qty} for t in top],
+			"top_items": [{"name": t["item_name"], "qty": t["qty"]} for t in top],
 		},
 		"block": {
 			"type": "metrics",
-			"title": f"فروش {PERIOD_LABELS.get(period, '')}",
+			"title": f"فروش · {label}",
 			"items": [
 				{"label": "فروش", "value": kpis["revenue"], "format": "toman", "change": change},
 				{"label": "سفارش", "value": kpis["orders"], "format": "number"},
@@ -84,16 +74,18 @@ def sales_report(period="today"):
 	}
 
 
-def top_selling(period="week", limit=5):
-	start, end = _range(period)
-	rows = dashboard._top_items(get_cafe_settings().company, start, end, int(limit))
+def top_selling(period="week", limit=5, from_date=None, to_date=None, date=None, order_by="qty", worst=False):
+	start, end, label = reports.span(period, from_date, to_date, date)
+	rows = dashboard._top_items(get_cafe_settings().company, start, end, 1000)
+	key = "revenue" if order_by == "revenue" else "qty"
+	rows = sorted(rows, key=lambda r: r[key], reverse=not worst)[: max(1, min(int(limit or 5), 25))]
 	return {
-		"data": [{"name": r.item_name, "qty": r.qty, "revenue_toman": round(r.revenue / 10)} for r in rows],
+		"data": {"range": label, "items": [{"name": r["item_name"], "qty": r["qty"], "revenue_toman": round(r["revenue"] / 10)} for r in rows]},
 		"block": {
 			"type": "list",
-			"title": f"پرفروش‌های {PERIOD_LABELS.get(period, '')}",
+			"title": f"{'کم‌فروش‌ها' if worst else 'پرفروش‌ها'} · {label}",
 			"items": [
-				{"label": r.item_name, "value": r.qty, "format": "number", "hint": f"{toman(r.revenue)} تومان"}
+				{"label": r["item_name"], "value": r["qty"], "format": "number", "hint": f"{toman(r['revenue'])} تومان"}
 				for r in rows
 			],
 		},
@@ -147,12 +139,14 @@ def stock_status(item_name=None):
 	}
 
 
-def profit_loss(period="month"):
-	report = accounting.overview(period if period in ("week", "month", "year") else "month")
+def profit_loss(period="month", from_date=None, to_date=None):
+	start, end, label = reports.span(period, from_date, to_date)
+	report = accounting.overview("month", from_date=start, to_date=end)
 	margin = report["net_profit"] / report["income"] * 100 if report["income"] else 0
 	return {
 		"data": {
-			"period": PERIOD_LABELS.get(period, period),
+			"range": label,
+			"note": "Only what is recorded in ERP: till sales, expenses entered in the panel. Purchase-desk purchases are not in the books.",
 			"income_toman": round(report["income"] / 10),
 			"cost_of_goods_toman": round(report["cogs"] / 10),
 			"operating_expenses_toman": round(report["operating_expenses"] / 10),
@@ -164,7 +158,7 @@ def profit_loss(period="month"):
 		},
 		"block": {
 			"type": "metrics",
-			"title": f"سود و زیان {PERIOD_LABELS.get(period, '')}",
+			"title": f"سود و زیان · {label}",
 			"items": [
 				{"label": "درآمد", "value": report["income"], "format": "toman"},
 				{"label": "بهای تمام‌شده", "value": report["cogs"], "format": "toman"},
@@ -282,6 +276,92 @@ def propose_waste(ingredient, quantity, unit=None, reason=None):
 	)
 
 
+BUY_PAYMENTS = {"cash": "Cash", "card": "Card", "transfer": "Transfer", "credit": "Credit"}
+BUY_PAYMENT_LABELS = {"Cash": "نقدی", "Card": "کارت", "Transfer": "کارت به کارت", "Credit": "نسیه"}
+
+
+def propose_purchase_entry(items, supplier=None, payment="card", date=None, note=None, scope=None):
+	"""A purchase for the restaurant/café purchase register, waiting for confirmation."""
+	allowed = buyer_scopes()
+	if allowed and not scope and len(allowed) == 1:
+		scope = allowed[0]
+	if scope not in SCOPE_LABELS or (allowed and scope not in allowed):
+		return {"data": {"error": "بپرس این خرید برای رستوران است یا کافه (scope: Restaurant یا Cafe)"}, "block": None}
+	if not allowed:
+		require_manager()
+
+	lines, rows = [], []
+	for raw in items if isinstance(items, list) else []:
+		name = str(raw.get("name") or "").strip()
+		qty = flt(raw.get("quantity"))
+		total = flt(raw.get("total_price_toman")) * 10
+		if not total and qty and raw.get("unit_price_toman"):
+			total = qty * flt(raw["unit_price_toman"]) * 10
+		if not name or total <= 0:
+			return {"data": {"error": f"مبلغ «{name or 'یکی از اقلام'}» معلوم نیست؛ از کاربر بپرس"}, "block": None}
+		rows.append({"item_name": name, "qty": qty, "unit": raw.get("unit") or "", "amount": total})
+		lines.append({"label": f"{name} · {fa(qty, 0 if qty.is_integer() else 2) if qty else ''} {raw.get('unit') or ''}".strip(" ·"), "value": total, "format": "toman"})
+	if not rows:
+		return {"data": {"error": "هیچ قلمی برای خرید مشخص نشده"}, "block": None}
+
+	mode = BUY_PAYMENTS.get(payment, "Card")
+	total = sum(r["amount"] for r in rows)
+	lines += [
+		{"label": "بخش", "value": SCOPE_LABELS[scope]},
+		{"label": "فروشنده", "value": supplier or "—"},
+		{"label": "پرداخت", "value": BUY_PAYMENT_LABELS[mode]},
+		{"label": "تاریخ", "value": str(date or nowdate()), "format": "date"},
+		{"label": "جمع کل", "value": total, "format": "toman"},
+	]
+	return _proposal(
+		{"kind": "buy", "scope": scope, "items": rows, "supplier": supplier, "payment": mode, "date": date or nowdate(), "note": note},
+		title=f"ثبت خرید {SCOPE_LABELS[scope]}",
+		lines=lines,
+	)
+
+
+def purchase_report(period="week", scope=None, from_date=None, to_date=None, date=None):
+	allowed = buyer_scopes()
+	if allowed and scope and scope not in allowed:
+		return {"data": {"error": "به خریدهای این بخش دسترسی نداری"}, "block": None}
+	scope = scope or (allowed[0] if len(allowed) == 1 else None)
+	start, end, label = reports.span(period, from_date, to_date, date)
+	result = purchasing.list_purchases(scope=scope, from_date=start, to_date=end, limit=60)
+	rows = result["rows"]
+	totals = result["totals"]
+	return {
+		"data": {
+			"range": label,
+			"totals_toman": {SCOPE_LABELS[k]: round(v["total"] / 10) for k, v in totals.items() if not scope or k == scope},
+			"purchases": [
+				{
+					"date": str(r.purchase_date),
+					"desk": SCOPE_LABELS.get(r.scope),
+					"supplier": r.supplier,
+					"toman": round(r.total / 10),
+					"items": [f"{i.item_name} {i.qty or ''} {i.unit or ''}".strip() for i in r["items"]],
+				}
+				for r in rows[:15]
+			],
+		},
+		"block": {
+			"type": "list",
+			"title": f"خریدها · {label}",
+			"items": [
+				{"label": f"{r.supplier or 'خرید'} · {'، '.join(i.item_name for i in r['items'][:3])}", "value": r.total, "format": "toman", "hint": str(r.purchase_date)}
+				for r in rows[:8]
+			],
+		}
+		if rows
+		else None,
+	}
+
+
+def price_history(item_name):
+	allowed = buyer_scopes()
+	return reports.price_history(item_name, scope=allowed[0] if len(allowed) == 1 else None)
+
+
 def _proposal(payload, title, lines):
 	proposal_id = frappe.generate_hash(length=12)
 	frappe.cache.set_value(
@@ -311,6 +391,25 @@ def confirm_proposal(proposal_id):
 	elif p["kind"] == "waste":
 		name = inventory.record_waste(p["items"], p["reason"])
 		message = "ضایعات ثبت شد و از انبار کسر شد"
+	elif p["kind"] == "cheque":
+		require_manager()
+		name = cheques.save_cheque(p["data"])
+		message = "چک ثبت شد و در تقویم آمد"
+	elif p["kind"] == "cheque_status":
+		require_manager()
+		name = cheques.set_status(p["name"], p["status"])
+		message = "وضعیت چک به‌روز شد"
+	elif p["kind"] == "ingredient_price":
+		require_manager()
+		frappe.db.set_value("Item", p["item_code"], "valuation_rate", p["rate"])
+		name = p["item_code"]
+		message = "قیمت ماده ثبت شد و بهای تمام‌شده محصولات به‌روز شد"
+	elif p["kind"] == "buy":
+		purchasing._scope_for_write(p["scope"])
+		name = purchasing.create_or_update(
+			None, p["scope"], p["items"], p["supplier"], p["payment"], p["date"], p["note"], source="Assistant"
+		)["name"]
+		message = f"خرید {SCOPE_LABELS[p['scope']]} ثبت شد"
 	else:
 		frappe.throw(_("نوع پیشنهاد نامعتبر است"))
 
@@ -379,19 +478,42 @@ def match_supplier(name=None):
 
 TOOLS = {
 	"sales_report": sales_report,
+	"sales_breakdown": reports.sales_breakdown,
 	"top_selling": top_selling,
+	"item_sales": reports.item_sales,
+	"find_orders": reports.find_orders,
+	"order_detail": reports.order_detail,
 	"stock_status": stock_status,
 	"profit_loss": profit_loss,
 	"cash_balances": cash_balances,
-	"recent_expenses": recent_expenses,
+	"expenses_report": reports.expenses_report,
+	"purchase_report": purchase_report,
+	"price_history": reports.price_history,
+	"cheques_report": reports.cheques_report,
+	"staff_report": reports.staff_report,
+	"day_overview": reports.day_overview,
+	"alerts": reports.alerts,
+	"menu_item_info": reports.menu_item_info,
+	"menu_costing": reports.menu_costing,
+	"ingredient_prices": reports.ingredient_prices,
 	"propose_expense": propose_expense,
-	"propose_purchase": propose_purchase,
 	"propose_waste": propose_waste,
+	"propose_purchase_entry": propose_purchase_entry,
+	"propose_cheque": reports.propose_cheque,
+	"propose_cheque_status": reports.propose_cheque_status,
+	"propose_ingredient_price": reports.propose_ingredient_price,
+}
+# A purchase manager's assistant: their own desk's purchases, nothing else.
+BUYER_TOOLS = {
+	"propose_purchase_entry": propose_purchase_entry,
+	"purchase_report": purchase_report,
+	"price_history": price_history,
 }
 
-_PERIOD = {"type": "string", "enum": ["today", "yesterday", "week", "month", "year"]}
-_UNIT = {"type": "string", "description": "واحد به فارسی: کیلو، گرم، لیتر، میل، عدد"}
+_UNIT = {"type": "string", "description": "واحد به فارسی: کیلو، گرم، لیتر، میل، عدد، بسته، شانه"}
 _PAYMENT = {"type": "string", "enum": ["cash", "card", "credit"], "description": "cash=نقدی، card=کارتخوان، credit=نسیه"}
+_DATES = reports.DATE_ARGS
+_RANGE = {k: v for k, v in _DATES.items() if k != "date"}
 
 
 def _spec(name, description, properties=None, required=None):
@@ -405,16 +527,111 @@ def _spec(name, description, properties=None, required=None):
 	}
 
 
+_PURCHASE_ENTRY_SPEC = _spec(
+	"propose_purchase_entry",
+	"Prepare a purchase (ingredients, groceries, supplies) for the restaurant or café purchase register, for the user to confirm. "
+	"Put every item the user bought in one call.",
+	{
+		"items": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "description": "Item name in Persian, e.g. گوشت چرخ‌کرده"},
+					"quantity": {"type": "number"},
+					"unit": _UNIT,
+					"total_price_toman": {"type": "number", "description": "What was paid for this line"},
+					"unit_price_toman": {"type": "number", "description": "Price per the given unit, when the total is not given"},
+				},
+				"required": ["name"],
+			},
+		},
+		"supplier": {"type": "string", "description": "Shop or supplier name"},
+		"payment": {"type": "string", "enum": ["cash", "card", "transfer", "credit"], "description": "cash=نقدی، card=کارت، transfer=کارت به کارت، credit=نسیه"},
+		"date": {"type": "string", "description": "Shamsi like 1405/07/14 or YYYY-MM-DD; omit for today"},
+		"note": {"type": "string"},
+		"scope": {"type": "string", "enum": ["Restaurant", "Cafe"], "description": "Purchase desk; required when the user manages both"},
+	},
+	["items"],
+)
+_PURCHASE_REPORT_SPEC = _spec(
+	"purchase_report",
+	"Recorded purchases with totals per desk, for any period or date range.",
+	{**_DATES, "scope": {"type": "string", "enum": ["Restaurant", "Cafe"]}},
+)
+_PRICE_HISTORY_SPEC = _spec(
+	"price_history",
+	"Recent purchase prices of one item (e.g. «آخرین قیمت گوشت؟»), newest first, with unit price.",
+	{"item_name": {"type": "string"}},
+	["item_name"],
+)
+
+
+def _without_scope(spec):
+	"""A purchase manager's desk is fixed by the server, so the model is not offered a choice."""
+	spec = copy.deepcopy(spec)
+	spec["function"]["parameters"]["properties"].pop("scope", None)
+	return spec
+
+
+def toolset():
+	"""(tool specs, registry) the current user may use."""
+	allowed = buyer_scopes()
+	if allowed:
+		if len(allowed) == 1:
+			return [_without_scope(_PURCHASE_ENTRY_SPEC), _without_scope(_PURCHASE_REPORT_SPEC), _PRICE_HISTORY_SPEC], BUYER_TOOLS
+		return [_PURCHASE_ENTRY_SPEC, _PURCHASE_REPORT_SPEC, _PRICE_HISTORY_SPEC], BUYER_TOOLS
+	return TOOL_SPECS, TOOLS
+
+
 TOOL_SPECS = [
-	_spec("sales_report", "Sales KPIs for a period. Call for any question about sales, revenue, orders or average ticket.", {"period": _PERIOD}),
-	_spec("top_selling", "Best-selling menu items for a period.", {"period": _PERIOD, "limit": {"type": "integer"}}),
+	_spec("sales_report", "Sales KPIs (revenue, orders, average ticket, gross profit, change vs the previous period of equal length, top 3 items) for a period, one day or a range.", _DATES),
+	_spec("sales_breakdown", "Sales by category, busiest hours and payment methods for a period, day or range.", _DATES),
+	_spec(
+		"top_selling",
+		"Best (or worst) selling menu items by quantity or revenue.",
+		{**_DATES, "limit": {"type": "integer"}, "order_by": {"type": "string", "enum": ["qty", "revenue"]}, "worst": {"type": "boolean"}},
+	),
+	_spec("item_sales", "How many of one menu item sold and its revenue in a period (default 30 days).", {"item_name": {"type": "string"}, **_DATES}, ["item_name"]),
+	_spec(
+		"find_orders",
+		"List orders (invoices) of a day or range with count and revenue; search by customer name/ID or invoice number; filter by payment state.",
+		{
+			**_DATES,
+			"search": {"type": "string"},
+			"payment_state": {"type": "string", "enum": ["paid", "credit", "partial", "unpaid", "unknown", "cancelled"]},
+			"limit": {"type": "integer"},
+		},
+	),
+	_spec("order_detail", "Items and payments of one order by its invoice number (e.g. ACC-SINV-2026-01240).", {"name": {"type": "string"}}, ["name"]),
 	_spec("stock_status", "Stock level of one ingredient, or all low-stock ingredients when item_name is omitted.", {"item_name": {"type": "string"}}),
-	_spec("profit_loss", "Profit & loss: income, cost of goods, operating expenses, net profit.", {"period": {"type": "string", "enum": ["week", "month", "year"]}}),
+	_spec("profit_loss", "Profit & loss from the books: income, cost of goods, operating expenses, net profit.", _RANGE),
 	_spec("cash_balances", "Current cash register and bank/card account balances."),
-	_spec("recent_expenses", "Most recently recorded expenses.", {"limit": {"type": "integer"}}),
+	_spec("expenses_report", "Recorded operating expenses by type and the latest entries for a period (default 30 days).", _DATES),
+	_PURCHASE_REPORT_SPEC,
+	_PRICE_HISTORY_SPEC,
+	_spec(
+		"cheques_report",
+		"Cheques and promissory notes: pending totals, due this week, overdue, bounced and the list with Shamsi due dates.",
+		{
+			"direction": {"type": "string", "enum": ["Received", "Issued"]},
+			"status": {"type": "string", "enum": ["Pending", "Cleared", "Bounced", "Transferred", "Returned", "Cancelled", "all"]},
+			"due_within_days": {"type": "integer"},
+		},
+	),
+	_spec("staff_report", "Staff, their contracts (Shamsi dates, days left), salaries, shifts and Shamsi payday; one person when name is given.", {"name": {"type": "string"}}),
+	_spec("day_overview", "Everything that happened on one day: sales, purchases, expenses, cheques due, staff events.", {"date": _DATES["date"]}),
+	_spec("alerts", "Current warnings: cheques due or overdue, contracts ending, paydays, quiet till, recipe gaps."),
+	_spec("menu_item_info", "One menu item: selling price, recipe rows, cost per serving and margin.", {"name": {"type": "string"}}, ["name"]),
+	_spec(
+		"menu_costing",
+		"Menu costing lists: lowest or best margins, items without a recipe, or recipes missing ingredient prices.",
+		{"view": {"type": "string", "enum": ["low_margin", "best_margin", "no_recipe", "unpriced"]}, "limit": {"type": "integer"}},
+	),
+	_spec("ingredient_prices", "Purchase price of ingredients per kilo/litre/unit (all, or one by name).", {"name": {"type": "string"}}),
 	_spec(
 		"propose_expense",
-		"Prepare an operating expense (rent, salaries, bills, repairs...) for the user to confirm. Call when the user says they paid for something that is not an ingredient.",
+		"Prepare an operating expense (rent, salaries, bills, repairs...) for the user to confirm. Call when the user says they paid for something that is not a purchase of goods.",
 		{
 			"category": {"type": "string", "description": "What it was for, in Persian"},
 			"amount_toman": {"type": "number"},
@@ -425,23 +642,41 @@ TOOL_SPECS = [
 		["category", "amount_toman"],
 	),
 	_spec(
-		"propose_purchase",
-		"Prepare an ingredient purchase (adds stock) for the user to confirm.",
-		{
-			"ingredient": {"type": "string"},
-			"quantity": {"type": "number"},
-			"unit": _UNIT,
-			"total_price_toman": {"type": "number"},
-			"unit_price_toman": {"type": "number", "description": "Price per the given unit"},
-			"supplier": {"type": "string"},
-			"payment": _PAYMENT,
-		},
-		["ingredient", "quantity"],
-	),
-	_spec(
 		"propose_waste",
 		"Prepare a write-off of spoiled or wasted ingredients for the user to confirm.",
 		{"ingredient": {"type": "string"}, "quantity": {"type": "number"}, "unit": _UNIT, "reason": {"type": "string"}},
 		["ingredient", "quantity"],
+	),
+	_PURCHASE_ENTRY_SPEC,
+	_spec(
+		"propose_cheque",
+		"Prepare a new cheque or promissory note for the user to confirm. Received = the café gets it; Issued = the café gives it.",
+		{
+			"direction": {"type": "string", "enum": ["Received", "Issued"]},
+			"party": {"type": "string", "description": "Person or company"},
+			"amount_toman": {"type": "number"},
+			"due_date": {"type": "string", "description": "Shamsi like 1405/08/15 or YYYY-MM-DD"},
+			"kind": {"type": "string", "enum": ["Regular", "Guarantee", "Promissory"]},
+			"bank": {"type": "string"},
+			"cheque_no": {"type": "string"},
+			"note": {"type": "string"},
+		},
+		["direction", "party", "amount_toman"],
+	),
+	_spec(
+		"propose_cheque_status",
+		"Prepare a non-settlement status change of an existing cheque. Clearing a cheque requires the Cheques page to select accounts and post a Journal Entry.",
+		{
+			"party": {"type": "string"},
+			"status": {"type": "string", "enum": ["Pending", "Bounced", "Transferred", "Returned", "Cancelled"]},
+			"amount_toman": {"type": "number"},
+		},
+		["party", "status"],
+	),
+	_spec(
+		"propose_ingredient_price",
+		"Prepare an ingredient's purchase price (used for recipe costs), e.g. شیر لیتری ۶۰ هزار.",
+		{"ingredient": {"type": "string"}, "price_toman": {"type": "number"}, "per": {"type": "string", "enum": ["کیلو", "لیتر", "گرم", "میلی‌لیتر", "عدد"]}},
+		["ingredient", "price_toman"],
 	),
 ]

@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 
+from cafe_app.source_catalog import UNVERIFIED_LEGACY_ITEMS, is_source_menu_item
 from cafe_app.utils import get_cafe_settings, menu_groups
 
 ORDER_TYPES = ("سالن", "بیرون‌بر", "پیک")
@@ -17,6 +18,7 @@ def get_menu():
 		fields=["item_code", "item_name", "item_group", "image", "description"],
 		order_by="item_name asc",
 	)
+	items = [item for item in items if is_source_menu_item(item.item_code) and item.item_code not in UNVERIFIED_LEGACY_ITEMS]
 	prices = dict(
 		frappe.get_all(
 			"Item Price",
@@ -44,7 +46,7 @@ def create_order(items, payments, order_type="سالن", table_no=None, discount
 	return {"name": invoice.name, "grand_total": flt(invoice.rounded_total or invoice.grand_total)}
 
 
-def build_pos_invoice(items, payments, remarks=None, discount_amount=0, posting_date=None, posting_time=None):
+def build_pos_invoice(items, payments, remarks=None, discount_amount=0, posting_date=None, posting_time=None, expected_total=None):
 	"""Insert and submit a POS Sales Invoice; payments without an amount absorb the remaining total."""
 	settings = get_cafe_settings()
 
@@ -67,16 +69,26 @@ def build_pos_invoice(items, payments, remarks=None, discount_amount=0, posting_
 			{"set_posting_time": 1, "posting_date": posting_date, "posting_time": posting_time, "due_date": posting_date}
 		)
 	for row in items:
-		invoice.append("items", {"item_code": row["item_code"], "qty": flt(row["qty"])})
+		item = {"item_code": row["item_code"], "qty": flt(row["qty"])}
+		if row.get("rate") is not None:
+			item["rate"] = flt(row["rate"])
+		invoice.append("items", item)
 
 	if flt(discount_amount):
 		invoice.apply_discount_on = "Grand Total"
 		invoice.discount_amount = flt(discount_amount)
 
 	invoice.set_missing_values()
+	# Imported SepandYar lines carry the exact source name for their warehouse.
+	# Keep that invoice snapshot even if an older item master has an ambiguous name.
+	for source_row, invoice_row in zip(items, invoice.items):
+		if source_row.get("item_name"):
+			invoice_row.item_name = source_row["item_name"]
 	invoice.calculate_taxes_and_totals()
 
 	total = flt(invoice.rounded_total or invoice.grand_total)
+	if expected_total is not None and abs(total - flt(expected_total)) > 1:
+		frappe.throw(_("جمع فاکتور واردشده با مبلغ سپهریار برابر نیست"))
 	invoice.set("payments", [])
 	remaining = total
 	for payment in payments:

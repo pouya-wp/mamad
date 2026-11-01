@@ -36,7 +36,10 @@ def get_cafe_settings(company=None):
 
 
 def menu_groups():
-	return [MENU_ROOT, *frappe.get_all("Item Group", filters={"parent_item_group": MENU_ROOT}, pluck="name")]
+	from cafe_app.install import MENU_SUB_GROUPS
+	groups = frappe.get_all("Item Group", filters={"parent_item_group": MENU_ROOT}, pluck="name")
+	ordered = [group for group in MENU_SUB_GROUPS if group in groups]
+	return [MENU_ROOT, *ordered, *sorted(set(groups) - set(ordered))]
 
 
 def ingredient_groups():

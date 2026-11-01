@@ -10,6 +10,15 @@ import { faNumber, percent, toman, toRial, toToman, UOM_LABELS, uom } from '@/li
 import { fxLite } from '@/lib/motion'
 import { toast, toastError } from '@/lib/toast'
 import type { Ingredient, MenuItem, MenuItemDetail, RecipeRow } from '@/lib/types'
+import { useSession } from '@/stores/session'
+
+/**
+ * The restaurant's purchase manager keeps the recipes: they open an item to change
+ * what goes into it, but never see what it sells for or earns — the server leaves
+ * those fields out of the payload, and the page leaves their inputs out of the form.
+ */
+const session = useSession()
+const buyerMode = computed(() => !!session.buyerScope)
 
 type Tab = 'menu' | 'ingredients'
 const tab = ref<Tab>('menu')
@@ -42,15 +51,30 @@ async function load() {
 onMounted(load)
 
 const visibleMenu = computed(() => menu.value.filter((m) => filter.value === 'همه' || m.item_group === filter.value))
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { همه: menu.value.length }
+  for (const item of menu.value) counts[item.item_group] = (counts[item.item_group] ?? 0) + 1
+  return counts
+})
 const marginTone = (m: number) => (m >= 65 ? 'text-mint-400 bg-mint-400/10' : m >= 45 ? 'text-amber-300 bg-amber-300/10' : 'text-rose-400 bg-rose-400/10')
 
 // ---- Menu item editor ----
-type Editor = { item_code?: string; item_name: string; item_group: string; rateToman: number | null; description: string; active: boolean; recipe: RecipeRow[] }
+type RecipeLine = { ingredient_name: string; qty: number | null; unit: string; costToman: number | null; note: string }
+type Editor = {
+  item_code?: string
+  item_name: string
+  item_group: string
+  rateToman: number | null
+  description: string
+  active: boolean
+  recipe: RecipeLine[]
+  recipeNotes: string
+}
 const editorOpen = ref(false)
 const editor = ref<Editor>(blankEditor())
 
 function blankEditor(): Editor {
-  return { item_name: '', item_group: groups.value.menu[0] ?? '', rateToman: null, description: '', active: true, recipe: [] }
+  return { item_name: '', item_group: groups.value.menu[0] ?? '', rateToman: null, description: '', active: true, recipe: [], recipeNotes: '' }
 }
 
 /** The clicked card morphs into the editor (View Transitions API); plain modal elsewhere. */
@@ -78,26 +102,75 @@ async function editItem(item?: MenuItem) {
       item_code: d.item_code,
       item_name: d.item_name,
       item_group: d.item_group,
-      rateToman: toToman(d.rate),
+      rateToman: d.rate === undefined ? null : toToman(d.rate),
       description: d.description ?? '',
       active: !d.disabled,
-      recipe: d.recipe,
+      recipe: d.recipe.map((r: RecipeRow) => ({
+        ingredient_name: r.ingredient_name,
+        qty: r.qty,
+        unit: r.unit ?? '',
+        costToman: r.fixed_cost ? toToman(r.fixed_cost) : null,
+        note: r.note ?? '',
+      })),
+      recipeNotes: d.recipe_notes ?? '',
     }
   } catch (error) {
     toastError(error)
   }
 }
 
-const ingredientBy = computed(() => new Map(ingredients.value.map((i) => [i.item_code, i])))
-const recipeCost = computed(() =>
-  editor.value.recipe.reduce((sum, r) => sum + (Number(r.qty) || 0) * (ingredientBy.value.get(r.item_code)?.valuation_rate ?? 0), 0),
-)
+const ingredientByName = computed(() => new Map(ingredients.value.map((i) => [i.item_name, i])))
+const RECIPE_UNITS = ['گرم', 'میلی‌لیتر', 'عدد', 'کیلو', 'لیتر']
+const UNIT_FACTOR: Record<string, number> = { گرم: 1, 'میلی‌لیتر': 1, عدد: 1, کیلو: 1000, لیتر: 1000 }
+
+/** Rial cost of a row per serving: its fixed cost, else quantity × the ingredient's purchase price. null = not priced yet. */
+function lineCost(r: RecipeLine): number | null {
+  if (r.costToman) return toRial(r.costToman)
+  const item = ingredientByName.value.get(r.ingredient_name.trim())
+  if (!item) return 0
+  const factor = UNIT_FACTOR[r.unit.trim()] ?? (item.stock_uom === 'Nos' && !r.unit.trim() ? 1 : undefined)
+  if (!r.qty || !item.valuation_rate || !factor) return null
+  return r.qty * factor * item.valuation_rate
+}
+const recipeCost = computed(() => editor.value.recipe.reduce((sum, r) => sum + (lineCost(r) ?? 0), 0))
+const unpricedLines = computed(() => editor.value.recipe.filter((r) => r.ingredient_name.trim() && lineCost(r) === null).length)
 const editorMargin = computed(() => {
   const rate = toRial(editor.value.rateToman ?? 0)
   return rate ? ((rate - recipeCost.value) / rate) * 100 : 0
 })
 
+const recipePayload = () =>
+  editor.value.recipe
+    .filter((r) => r.ingredient_name.trim())
+    .map((r) => ({
+      ingredient_name: r.ingredient_name.trim(),
+      ingredient: ingredientByName.value.get(r.ingredient_name.trim())?.item_code ?? null,
+      qty: r.qty,
+      unit: r.unit,
+      fixed_cost: r.costToman ? toRial(r.costToman) : null,
+      note: r.note,
+    }))
+
+async function saveRecipeOnly() {
+  saving.value = true
+  try {
+    await post('cafe_app.api.menu.save_recipe', {
+      item_code: editor.value.item_code,
+      recipe: recipePayload(),
+      recipe_notes: editor.value.recipeNotes,
+    })
+    toast('رسپی ذخیره شد')
+    editorOpen.value = false
+    load()
+  } catch (error) {
+    toastError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function saveItem() {
+  if (buyerMode.value) return saveRecipeOnly()
   saving.value = true
   try {
     await post('cafe_app.api.menu.save_menu_item', {
@@ -108,7 +181,8 @@ async function saveItem() {
         rate: toRial(editor.value.rateToman ?? 0),
         description: editor.value.description,
         disabled: editor.value.active ? 0 : 1,
-        recipe: editor.value.recipe.filter((r) => r.item_code && Number(r.qty) > 0),
+        recipe: recipePayload(),
+        recipe_notes: editor.value.recipeNotes,
       },
     })
     toast('آیتم منو ذخیره شد')
@@ -163,23 +237,29 @@ const costPerUnit = (i: Ingredient) => faNumber(i.valuation_rate / 10, i.valuati
 <template>
   <div class="space-y-6">
     <div class="flex flex-wrap items-center gap-3">
-      <Segmented v-model="tab" :options="tabs" />
-      <div class="flex-1" />
-      <button v-if="tab === 'menu'" class="btn-primary" @click="editItem()"><Plus class="size-4" /> آیتم جدید</button>
-      <button v-else class="btn-primary" @click="editIngredient()"><Plus class="size-4" /> ماده اولیه جدید</button>
+      <template v-if="buyerMode">
+        <p class="text-sm text-ink-400">رسپی هر آیتم را باز کن و مواد و مقدارها را به‌روز نگه دار.</p>
+      </template>
+      <template v-else>
+        <Segmented v-model="tab" :options="tabs" />
+        <div class="flex-1" />
+        <button v-if="tab === 'menu'" class="btn-primary" @click="editItem()"><Plus class="size-4" /> آیتم جدید</button>
+        <button v-else class="btn-primary" @click="editIngredient()"><Plus class="size-4" /> ماده اولیه جدید</button>
+      </template>
     </div>
 
     <!-- MENU -->
     <template v-if="tab === 'menu'">
-      <div class="-mx-1 flex gap-2 overflow-x-auto pb-1">
+      <div class="flex flex-wrap gap-2">
         <button
           v-for="g in ['همه', ...groups.menu]"
           :key="g"
-          class="shrink-0 rounded-full border px-4 py-1.5 text-sm transition"
+          class="flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm transition"
           :class="filter === g ? 'border-bone bg-bone font-medium text-ink-950' : 'border-white/10 text-ink-300 hover:text-ink-100'"
           @click="filter = g"
         >
           {{ g }}
+          <span class="num text-xs opacity-60">{{ faNumber(categoryCounts[g] ?? 0) }}</span>
         </button>
       </div>
 
@@ -203,14 +283,19 @@ const costPerUnit = (i: Ingredient) => faNumber(i.valuation_rate / 10, i.valuati
             </div>
             <Pencil class="size-4 shrink-0 text-ink-500 transition group-hover:text-one-400" />
           </div>
-          <p class="num mt-4 text-2xl font-black text-bone">{{ toman(m.rate) }} <span class="text-xs font-normal text-ink-400">تومان</span></p>
+          <p v-if="!buyerMode" class="num mt-4 text-2xl font-black text-bone">{{ toman(m.rate ?? 0) }} <span class="text-xs font-normal text-ink-400">تومان</span></p>
           <div class="mt-auto flex items-center gap-2 pt-5 text-xs">
-            <template v-if="m.has_recipe">
-              <span class="text-ink-400">بهای تمام‌شده {{ toman(m.cost) }}</span>
-              <span class="flex-1" />
-              <span class="num rounded-full px-2 py-0.5 font-medium" :class="marginTone(m.margin)">سود {{ percent(m.margin) }}</span>
+            <template v-if="buyerMode">
+              <span v-if="m.has_recipe" class="rounded-full bg-white/5 px-2 py-0.5 text-ink-300">رسپی دارد</span>
+              <span v-else class="rounded-full bg-one-500/10 px-2 py-0.5 text-one-400">بدون رسپی</span>
             </template>
-            <span v-else class="rounded-full bg-one-500/10 px-2 py-0.5 text-one-400">بدون رسپی</span>
+            <template v-else-if="m.has_recipe">
+              <span class="text-ink-400">بهای تمام‌شده {{ toman(m.cost ?? 0) }}</span>
+              <span class="flex-1" />
+              <span v-if="m.unpriced" class="rounded-full bg-amber-300/10 px-2 py-0.5 text-amber-300" title="بعضی مواد هنوز قیمت خرید یا مقدار ندارند">{{ faNumber(m.unpriced) }} قلم بی‌قیمت</span>
+              <span v-else class="num rounded-full px-2 py-0.5 font-medium" :class="marginTone(m.margin ?? 0)">سود {{ percent(m.margin ?? 0) }}</span>
+            </template>
+            <span v-else-if="!buyerMode" class="rounded-full bg-one-500/10 px-2 py-0.5 text-one-400">بدون رسپی</span>
             <span v-if="m.disabled" class="rounded-full bg-white/5 px-2 py-0.5 text-ink-300">غیرفعال</span>
           </div>
         </button>
@@ -254,7 +339,11 @@ const costPerUnit = (i: Ingredient) => faNumber(i.valuation_rate / 10, i.valuati
     <!-- Menu item modal -->
     <Modal v-model="editorOpen" :title="editor.item_code ? 'ویرایش آیتم منو' : 'آیتم جدید منو'" width="max-w-2xl" morph="menu-morph">
       <div class="space-y-6">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div v-if="buyerMode" class="rounded-2xl bg-white/[0.03] px-4 py-3">
+          <p class="text-[11px] text-ink-400">{{ editor.item_group }}</p>
+          <p class="mt-0.5 text-lg font-bold text-bone">{{ editor.item_name }}</p>
+        </div>
+        <div v-else class="grid gap-4 sm:grid-cols-2">
           <label class="block sm:col-span-2">
             <span class="mb-2 block text-sm text-ink-300">نام آیتم</span>
             <input v-model="editor.item_name" class="field" :disabled="!!editor.item_code" placeholder="مثلاً: لاته" />
@@ -278,39 +367,52 @@ const costPerUnit = (i: Ingredient) => faNumber(i.valuation_rate / 10, i.valuati
         <div>
           <div class="mb-3 flex items-center justify-between">
             <p class="font-bold text-bone">رسپی</p>
-            <button class="btn-ghost h-8 px-3 text-xs" @click="editor.recipe.push({ item_code: '', qty: 0 })"><Plus class="size-3.5" /> ماده</button>
+            <button class="btn-ghost h-8 px-3 text-xs" @click="editor.recipe.push({ ingredient_name: '', qty: null, unit: 'گرم', costToman: null, note: '' })"><Plus class="size-3.5" /> ماده</button>
           </div>
           <div v-if="editor.recipe.length" class="space-y-2">
-            <div v-for="(row, index) in editor.recipe" :key="index" class="grid grid-cols-[1fr_120px_auto] items-center gap-2">
-              <select v-model="row.item_code" class="field h-10">
-                <option value="" disabled>انتخاب ماده اولیه</option>
-                <option v-for="i in ingredients" :key="i.item_code" :value="i.item_code">{{ i.item_name }}</option>
-              </select>
-              <div class="relative">
-                <input v-model.number="row.qty" type="number" min="0" step="any" class="field h-10 pl-14" />
-                <span class="absolute inset-y-0 left-3 grid place-items-center text-xs text-ink-400">{{ uom(ingredientBy.get(row.item_code)?.stock_uom) }}</span>
-              </div>
+            <div class="hidden grid-cols-[1fr_80px_100px_110px_90px_auto] gap-2 px-1 text-[11px] text-ink-400 sm:grid">
+              <span>ماده</span><span>مقدار</span><span>واحد</span><span>هزینه ثابت (تومان)</span><span>هزینه</span><span class="w-10" />
+            </div>
+            <div v-for="(row, index) in editor.recipe" :key="index" class="grid grid-cols-3 items-center gap-2 sm:grid-cols-[1fr_80px_100px_110px_90px_auto]">
+              <input v-model="row.ingredient_name" class="field col-span-3 h-10 sm:col-span-1" list="recipe-ingredients" placeholder="نام ماده" :title="row.note" />
+              <input v-model.number="row.qty" type="number" min="0" step="any" class="field h-10" placeholder="مقدار" />
+              <input v-model="row.unit" class="field h-10" list="recipe-units" placeholder="واحد" />
+              <input v-model.number="row.costToman" type="number" min="0" step="any" class="field h-10" placeholder="—" />
+              <span class="num text-xs" :class="lineCost(row) === null ? 'text-amber-300' : 'text-ink-200'">
+                {{ lineCost(row) === null ? 'بی‌قیمت' : toman(lineCost(row)) }}
+              </span>
               <button class="grid size-10 place-items-center rounded-xl text-ink-400 hover:bg-white/5 hover:text-rose-400" @click="editor.recipe.splice(index, 1)">
                 <Trash2 class="size-4" />
               </button>
             </div>
+            <datalist id="recipe-ingredients">
+              <option v-for="i in ingredients" :key="i.item_code" :value="i.item_name" />
+            </datalist>
+            <datalist id="recipe-units">
+              <option v-for="u in RECIPE_UNITS" :key="u" :value="u" />
+            </datalist>
           </div>
           <p v-else class="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-ink-400">
-            با تعریف رسپی، هر فروش این آیتم مواد اولیه‌اش را از انبار کم می‌کند.
+            رسپی فقط بهای تمام‌شده را حساب می‌کند و از انبار چیزی کم نمی‌کند.
           </p>
-          <div class="mt-4 grid grid-cols-2 gap-3">
+          <p class="mt-3 text-xs leading-6 text-ink-500">
+            هر ردیف یا «هزینه ثابت» برای یک سرو دارد، یا مقداری که با آخرین قیمت خرید همان ماده حساب می‌شود.
+            <template v-if="unpricedLines"> <span class="text-amber-300">{{ faNumber(unpricedLines) }} ردیف هنوز مقدار یا قیمت خرید ندارد.</span></template>
+          </p>
+          <textarea v-if="editor.recipeNotes || editor.recipe.length" v-model="editor.recipeNotes" rows="2" class="field mt-3 text-xs" placeholder="یادداشت رسپی" />
+          <div class="mt-4 grid gap-3" :class="buyerMode ? 'grid-cols-1' : 'grid-cols-2'">
             <div class="rounded-2xl bg-white/[0.03] p-4">
               <p class="text-xs text-ink-400">بهای تمام‌شده</p>
               <p class="num mt-1 font-bold text-bone">{{ toman(recipeCost) }} <span class="text-xs font-normal text-ink-400">تومان</span></p>
             </div>
-            <div class="rounded-2xl bg-white/[0.03] p-4">
+            <div v-if="!buyerMode" class="rounded-2xl bg-white/[0.03] p-4">
               <p class="text-xs text-ink-400">حاشیه سود</p>
               <p class="num mt-1 font-bold" :class="marginTone(editorMargin).split(' ')[0]">{{ percent(editorMargin) }}</p>
             </div>
           </div>
         </div>
 
-        <label class="flex items-center gap-3 text-sm text-ink-200">
+        <label v-if="!buyerMode" class="flex items-center gap-3 text-sm text-ink-200">
           <input v-model="editor.active" type="checkbox" class="size-4 accent-one-500" />
           در منو و صندوق نمایش داده شود
         </label>

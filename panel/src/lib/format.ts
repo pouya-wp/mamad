@@ -38,6 +38,19 @@ export const shortTime = (time: string | null | undefined) => (time ? faDigits(t
 
 export const isoDate = (date: Date = new Date()) => dayjs(date).format('YYYY-MM-DD')
 
+/** "2026-09-14" -> "1405/06/23" for a Shamsi text field. */
+export const toJalaliInput = (date: string | null | undefined) =>
+  date ? dayjs(date).calendar('jalali').locale('en').format('YYYY/MM/DD') : ''
+
+/** "1405/06/23" (Persian or Latin digits) -> "2026-09-14"; null when empty or not a date. */
+export function fromJalaliInput(text: string | null | undefined): string | null {
+  const latin = (text ?? '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim()
+  const match = latin.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$/)
+  if (!match) return null
+  const parsed = dayjs(`${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`, { jalali: true } as never)
+  return parsed.isValid() ? parsed.calendar('gregory').format('YYYY-MM-DD') : null
+}
+
 /** Change between two values as a percentage, or null when there is no baseline. */
 export const delta = (current: number, previous: number) =>
   previous ? ((current - previous) / Math.abs(previous)) * 100 : null
@@ -54,6 +67,7 @@ export const UOM_LABELS: Record<string, string> = {
 export const uom = (value: string | null | undefined) => (value ? (UOM_LABELS[value] ?? value) : '')
 
 export const PAYMENT_LABELS: Record<string, string> = {
+	'تسویه سپهریار': 'سپهریار',
   Cash: 'نقدی',
   'Credit Card': 'کارتخوان',
   'Wire Transfer': 'کارت به کارت',

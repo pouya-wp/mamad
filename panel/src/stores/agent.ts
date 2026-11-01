@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-import { get, post } from '@/lib/api'
+import { get, post, postAgentFile } from '@/lib/api'
 import { sound } from '@/lib/sound'
 
 export type ValueFormat = 'toman' | 'number' | 'percent' | 'date' | 'text'
@@ -38,9 +38,11 @@ export type ChatMessage = {
   pending?: boolean
   /** a reply that hasn't finished its typing animation yet */
   fresh?: boolean
+  attachment?: { name: string; previewUrl?: string }
+  historyContent?: string
 }
 
-type ChatReply = { text: string; blocks: AgentBlock[]; suggestions: string[]; mode: 'demo' | 'live' }
+type ChatReply = { text: string; blocks: AgentBlock[]; suggestions: string[]; mode: 'demo' | 'live'; attachment_context?: string }
 
 let nextId = 1
 
@@ -61,28 +63,38 @@ export const useAgent = defineStore('agent', () => {
     }
   }
 
-  async function send(text: string) {
+  async function send(text: string, file?: File) {
     const message = text.trim()
-    if (!message || busy.value) return
+    if ((!message && !file) || busy.value) return false
     open.value = true
 
     const history = messages.value
-      .filter((m) => !m.pending && m.text)
+      .filter((m) => !m.pending && (m.historyContent || m.text))
       .slice(-10)
-      .map((m) => ({ role: m.role, content: m.text }))
+      .map((m) => ({ role: m.role, content: m.historyContent || m.text }))
 
-    messages.value.push({ id: nextId++, role: 'user', text: message })
+    const userMessage: ChatMessage = { id: nextId++, role: 'user', text: message || 'این پیوست را بررسی کن' }
+    if (file) userMessage.attachment = {
+      name: file.name,
+      ...(file.type.startsWith('image/') ? { previewUrl: URL.createObjectURL(file) } : {}),
+    }
+    messages.value.push(userMessage)
     const reply: ChatMessage = { id: nextId++, role: 'assistant', text: '', pending: true }
     messages.value.push(reply)
     busy.value = true
 
     try {
-      const data = await post<ChatReply>('cafe_app.api.agent.chat', { message, history })
+      const data = file
+        ? await postAgentFile<ChatReply>(message, history, file)
+        : await post<ChatReply>('cafe_app.api.agent.chat', { message, history })
       mode.value = data.mode
+      if (data.attachment_context) userMessage.historyContent = `${userMessage.text}\n${data.attachment_context}`
       Object.assign(reply, { text: data.text, blocks: data.blocks, suggestions: data.suggestions, pending: false, fresh: true })
       sound.reply()
+      return true
     } catch (error) {
       Object.assign(reply, { text: error instanceof Error ? error.message : 'خطایی رخ داد', pending: false, fresh: true })
+      return false
     } finally {
       busy.value = false
       // the reply object inside the reactive array must be re-read to trigger updates

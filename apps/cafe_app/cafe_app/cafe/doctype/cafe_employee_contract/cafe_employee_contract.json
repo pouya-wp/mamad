@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "creation": "2026-10-05 18:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "position",
+  "start_date",
+  "end_date",
+  "shift_start",
+  "shift_end",
+  "working_days",
+  "monthly_salary",
+  "payment_day",
+  "sign_date",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "position",
+   "fieldtype": "Data",
+   "label": "Position",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "shift_start",
+   "fieldtype": "Data",
+   "label": "Shift Start"
+  },
+  {
+   "fieldname": "shift_end",
+   "fieldtype": "Data",
+   "label": "Shift End"
+  },
+  {
+   "fieldname": "working_days",
+   "fieldtype": "Data",
+   "label": "Working Days"
+  },
+  {
+   "fieldname": "monthly_salary",
+   "fieldtype": "Currency",
+   "label": "Monthly Salary",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "payment_day",
+   "fieldtype": "Int",
+   "label": "Payment Day of Month"
+  },
+  {
+   "fieldname": "sign_date",
+   "fieldtype": "Date",
+   "label": "Sign Date"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Data",
+   "label": "Note"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-05 18:00:00",
+ "modified_by": "Administrator",
+ "module": "Cafe",
+ "name": "Cafe Employee Contract",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

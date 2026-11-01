@@ -1,0 +1,4 @@
+build/
+# the signing key: keep it, but it never belongs in the repo — every update of the
+# app must be signed with the same key or phones refuse to install over the old one
+*.jks

@@ -16,3 +16,11 @@ installRipple()
 installSoundEvents()
 if (DEMO) startDemoTraffic()
 createApp(App).use(createPinia()).use(router).mount('#app')
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // The online panel still works when service workers are unavailable.
+    })
+  })
+}

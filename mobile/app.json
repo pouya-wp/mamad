@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "ONE CAFE",
+    "slug": "one-cafe",
+    "version": "0.1.0",
+    "scheme": "onecafe",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "one.cafe.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "one.cafe.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0b",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-splash-screen", {
+        "backgroundColor": "#0a0a0b",
+        "image": "./assets/splash.png",
+        "imageWidth": 190,
+        "resizeMode": "contain"
+      }],
+      ["expo-notifications", {
+        "color": "#ff4f1a",
+        "defaultChannel": "one-cafe-updates"
+      }]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

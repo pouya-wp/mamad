@@ -1,0 +1,71 @@
+{
+ "doctype": "DocType",
+ "name": "Cafe Mobile Device",
+ "module": "Cafe",
+ "custom": 0,
+ "autoname": "field:token_hash",
+ "field_order": [
+  "user",
+  "platform",
+  "enabled",
+  "last_seen",
+  "token_hash",
+  "push_token"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Select",
+   "label": "Platform",
+   "options": "ios\nandroid",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "label": "Last Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "token_hash",
+   "fieldtype": "Data",
+   "label": "Token Hash",
+   "unique": 1,
+   "hidden": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "push_token",
+   "fieldtype": "Data",
+   "label": "Expo Push Token",
+   "hidden": 1,
+   "reqd": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1
+  }
+ ],
+ "sort_field": "last_seen",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

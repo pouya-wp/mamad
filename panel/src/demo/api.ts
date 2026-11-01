@@ -64,6 +64,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
 
       const byItem = new Map<string, { qty: number; revenue: number }>()
       const byGroup = new Map<string, { qty: number; revenue: number }>()
+      const groupItems = new Map<string, Map<string, { item_code: string; item_name: string; qty: number; revenue: number }>>()
       const byPayment = new Map<string, number>()
       const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, orders: 0, revenue: 0 }))
       for (const order of rows) {
@@ -76,6 +77,12 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
           group.qty += line.qty
           group.revenue += line.qty * line.rate
           byGroup.set(groupOf(line.item_code), group)
+          const items = groupItems.get(groupOf(line.item_code)) ?? new Map()
+          const detail = items.get(line.item_code) ?? { item_code: line.item_code, item_name: menuName(line.item_code), qty: 0, revenue: 0 }
+          detail.qty += line.qty
+          detail.revenue += line.qty * line.rate
+          items.set(line.item_code, detail)
+          groupItems.set(groupOf(line.item_code), items)
         }
         byPayment.set(order.mode, (byPayment.get(order.mode) ?? 0) + order.grand_total)
         hourly[order.date.getHours()].orders += 1
@@ -101,6 +108,7 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
         by_group: [...byGroup.entries()]
           .map(([item_group, value]) => ({ item_group, ...value }))
           .sort((a, b) => b.revenue - a.revenue),
+        group_items: Object.fromEntries([...groupItems.entries()].map(([group, items]) => [group, [...items.values()].sort((a, b) => b.revenue - a.revenue)])),
         payments: [...byPayment.entries()].map(([mode_of_payment, amount]) => ({ mode_of_payment, amount })).sort((a, b) => b.amount - a.amount),
         low_stock: demoDispatch('cafe_app.api.dashboard.low_stock'),
         recent_orders: [...world.orders]
@@ -114,6 +122,8 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
             is_return: o.is_return,
             remarks: `${o.type}${o.table ? ` | ${o.table}` : ''}`,
             owner: 'demo@one1cafe.ir',
+            owner_name: 'صندوق‌دار کافه',
+            customer_name: null,
           })),
       }
     }
@@ -164,7 +174,22 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
     case 'menu.get_menu_item': {
       const item = world.menu.find((m) => m.item_code === args.item_code)
       if (!item) throw new Error('آیتم پیدا نشد')
-      return { ...item, image: null, description: item.description ?? null, disabled: 0, recipe: RECIPES[item.item_code] ?? [] }
+      const UNIT: Record<string, string> = { Gram: 'گرم', Millilitre: 'میلی‌لیتر', Nos: 'عدد' }
+      return {
+        ...item,
+        image: null,
+        description: item.description ?? null,
+        disabled: 0,
+        recipe_notes: null,
+        recipe: (RECIPES[item.item_code] ?? []).map((r) => ({
+          ingredient_name: r.item_name,
+          ingredient: r.item_code,
+          qty: r.qty,
+          unit: UNIT[r.uom] ?? r.uom,
+          fixed_cost: null,
+          cost: r.qty * r.rate,
+        })),
+      }
     }
 
     case 'menu.save_menu_item': {
@@ -310,6 +335,19 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
       let rows = start && end ? [...ordersBetween(start, end)].reverse() : [...world.orders].reverse()
       if (search) rows = rows.filter((o) => o.name.includes(search) || o.items.some((i) => i.item_code.includes(search)))
       return rows.slice(Number(args.start ?? 0), Number(args.start ?? 0) + Number(args.limit ?? 40)).map(orderRow)
+    }
+
+    case 'orders.order_totals': {
+      const start = args.from_date ? new Date(String(args.from_date)) : null
+      const end = args.to_date ? new Date(String(args.to_date)) : null
+      const search = String(args.search ?? '').trim()
+      let rows = start && end ? ordersBetween(start, end) : world.orders
+      if (search) rows = rows.filter((o) => o.name.includes(search) || o.items.some((i) => i.item_code.includes(search)))
+      return {
+        count: rows.filter((o) => !o.is_return).length,
+        revenue: sum(rows, (o) => o.grand_total),
+        returns: rows.filter((o) => o.is_return).length,
+      }
     }
 
     case 'orders.get_order': {
@@ -512,6 +550,39 @@ export function demoDispatch(method: string, args: Args = {}): unknown {
       world.expenses.push(expense)
       return expense.name
     }
+
+    // ------------------------------------------------- purchase desks & staff
+    case 'purchasing.me':
+      return { is_manager: true, scope: null, scope_label: null, scopes: [] }
+    case 'purchasing.ingredients':
+      return world.ingredients.map((i) => ({ item_code: i.item_code, item_name: i.item_name, stock_uom: i.stock_uom }))
+    case 'purchasing.list_purchases':
+      return { rows: [], totals: {} }
+    case 'staff.list_staff':
+      return []
+    case 'daybook.alerts':
+      return []
+    case 'daybook.month': {
+      const days: Record<string, unknown> = {}
+      for (let d = new Date(String(args.from_date)); ymd(d) <= String(args.to_date); d.setDate(d.getDate() + 1)) {
+        const orders = ordersOfDay(new Date(d))
+        const revenue = orders.reduce((sum, o) => sum + o.grand_total, 0)
+        days[ymd(d)] = { sales: orders.length ? { revenue, orders: orders.length } : null, purchases: [], expenses: [], cheques: [], events: [] }
+      }
+      return days
+    }
+    case 'cheques.list_cheques': {
+      const empty = { pending: 0, pending_count: 0, due_week: 0, overdue: 0, bounced: 0 }
+      return { rows: [], summary: { Received: empty, Issued: empty } }
+    }
+    case 'cheques.save_cheque':
+    case 'cheques.set_status':
+    case 'cheques.delete_cheque':
+    case 'purchasing.save_purchase':
+    case 'purchasing.delete_purchase':
+    case 'staff.save_employee':
+    case 'staff.delete_employee':
+      throw new Error('در نسخه نمایشی ثبت نمی‌شود')
 
     // ------------------------------------------------------------------ agent
     default:

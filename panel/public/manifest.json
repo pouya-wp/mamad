@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "ONE CAFE · پنل مدیریت کافه",
+  "short_name": "ONE CAFE",
+  "description": "مدیریت سفارش‌ها، منو و انبار کافه",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "icons": [
+    { "src": "/one-cafe-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

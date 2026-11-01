@@ -1,0 +1,25 @@
+# Temporary small-VPS deployment: mount the app from this repository into each
+# Frappe process. The production compose stack supplies MariaDB and Redis.
+x-cafe-app: &cafe-app
+  volumes:
+    - /opt/mamad/apps/cafe_app:/home/frappe/frappe-bench/apps/cafe_app:ro
+  environment:
+    PYTHONPATH: /home/frappe/frappe-bench/apps/cafe_app
+
+services:
+  configurator: *cafe-app
+  backend: *cafe-app
+  queue-short: *cafe-app
+  queue-long: *cafe-app
+  scheduler: *cafe-app
+  websocket: *cafe-app
+  frontend:
+    <<: *cafe-app
+    ports:
+      - 127.0.0.1:8080:8080
+  db:
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --innodb-buffer-pool-size=128M

@@ -7,6 +7,7 @@ type Pulse = {
   orders: number
   revenue: number
   last: { name: string; base_grand_total: number; posting_time: string; is_return: 0 | 1 } | null
+  source_payment_revision?: string | null
 }
 
 /**
@@ -19,6 +20,8 @@ export const usePulse = defineStore('pulse', () => {
   /** bumped on every new order, so views can flash, refresh or beat */
   const beat = ref(0)
   const lastAmount = ref(0)
+  const paymentBeat = ref(0)
+  let paymentRevision = ''
 
   let timer: number | undefined
   let started = false
@@ -28,6 +31,9 @@ export const usePulse = defineStore('pulse', () => {
     const data = await get<Pulse>('cafe_app.api.dashboard.pulse').catch(() => null)
     if (!data) return
     const isNew = started && data.orders > orders.value
+    const revision = data.source_payment_revision ?? ''
+    if (started && revision !== paymentRevision) paymentBeat.value++
+    paymentRevision = revision
     orders.value = data.orders
     revenue.value = data.revenue
     if (isNew) {
@@ -50,5 +56,5 @@ export const usePulse = defineStore('pulse', () => {
     document.removeEventListener('visibilitychange', tick)
   }
 
-  return { orders, revenue, beat, lastAmount, start, stop, tick }
+  return { orders, revenue, beat, paymentBeat, lastAmount, start, stop, tick }
 })

@@ -7,8 +7,8 @@ import VChart from 'vue-echarts'
 import AgentInsights from '@/components/agent/AgentInsights.vue'
 import CupDonut from '@/components/charts/CupDonut.vue'
 import DayReceipt from '@/components/DayReceipt.vue'
-import HourClock from '@/components/charts/HourClock.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import Modal from '@/components/Modal.vue'
 import Marquee from '@/components/fx/Marquee.vue'
 import RollingNumber from '@/components/fx/RollingNumber.vue'
 import Panel from '@/components/Panel.vue'
@@ -16,6 +16,7 @@ import Segmented from '@/components/Segmented.vue'
 import StatCard from '@/components/StatCard.vue'
 import StoryCard from '@/components/StoryCard.vue'
 import { get } from '@/lib/api'
+import { toastError } from '@/lib/toast'
 import { CHART, tooltipBase } from '@/lib/charts'
 import {
   delta,
@@ -29,10 +30,11 @@ import {
   tomanCompact,
   uom,
 } from '@/lib/format'
-import type { DashboardSummary } from '@/lib/types'
+import type { DashboardSummary, OrderDetail } from '@/lib/types'
 import { useLoader } from '@/lib/useLoader'
 import { usePulse } from '@/stores/pulse'
 import { useSession } from '@/stores/session'
+import CalendarPage from '@/pages/CalendarPage.vue'
 
 type Period = 'today' | 'week' | 'month'
 
@@ -51,7 +53,7 @@ watch(period, load, { immediate: true })
 
 // a sale at the till refreshes the numbers under the owner's eyes
 const pulse = usePulse()
-watch(() => pulse.beat, load)
+watch(() => [pulse.beat, pulse.paymentBeat], load)
 
 const kpis = computed(() => data.value?.kpis)
 const prev = computed(() => data.value?.previous)
@@ -155,15 +157,26 @@ const trendOption = computed<EChartsOption>(() => {
   }
 })
 
-const peakHours = computed(() =>
-  [...(data.value?.hourly ?? [])]
-    .filter((h) => h.orders > 0)
-    .sort((a, b) => b.orders - a.orders)
-    .slice(0, 4),
-)
-const peakMax = computed(() => Math.max(1, ...peakHours.value.map((h) => h.orders)))
-
 const groupTotal = computed(() => (data.value?.by_group ?? []).reduce((sum, g) => sum + g.revenue, 0))
+const selectedGroup = ref<string | null>(null)
+const groupOpen = ref(false)
+const selectedGroupItems = computed(() => data.value?.group_items?.[selectedGroup.value ?? ''] ?? [])
+function openGroup(group: string) {
+  selectedGroup.value = group
+  groupOpen.value = true
+}
+const orderOpen = ref(false)
+const selectedOrder = ref<OrderDetail | null>(null)
+async function openOrder(name: string) {
+  orderOpen.value = true
+  selectedOrder.value = null
+  try {
+    selectedOrder.value = await get<OrderDetail>('cafe_app.api.orders.get_order', { name })
+  } catch (error) {
+    orderOpen.value = false
+    toastError(error)
+  }
+}
 const paymentsTotal = computed(() => (data.value?.payments ?? []).reduce((sum, p) => sum + p.amount, 0))
 const topMax = computed(() => Math.max(1, ...(data.value?.top_items ?? []).map((t) => t.qty)))
 
@@ -220,6 +233,11 @@ const orderType = (remarks: string | null) => remarks?.split(' | ')[0] || 'سف�
 
     <AgentInsights />
 
+    <section class="space-y-4">
+      <h2 class="text-lg font-bold text-bone">تقویم و جزئیات روز</h2>
+      <CalendarPage />
+    </section>
+
     <!-- KPIs -->
     <div class="grid gap-4 transition-opacity sm:grid-cols-2 xl:grid-cols-4" :class="loading && data ? 'opacity-60' : ''">
       <template v-if="kpis && prev">
@@ -257,12 +275,14 @@ const orderType = (remarks: string | null) => remarks?.split(' | ')[0] || 'سف�
 
       <Panel title="سهم دسته‌ها" subtitle="از فروش این بازه">
         <template v-if="data?.by_group.length">
-          <CupDonut :groups="data.by_group" :palette="CHART.palette" />
+          <CupDonut :groups="data.by_group" :palette="CHART.palette" @select="openGroup" />
           <ul class="mt-6 space-y-2.5">
-            <li v-for="(g, i) in data.by_group" :key="g.item_group" class="flex items-center gap-3 text-sm">
+            <li v-for="(g, i) in data.by_group" :key="g.item_group">
+              <button class="flex w-full items-center gap-3 rounded-lg py-1 text-right text-sm hover:bg-white/[0.04]" @click="openGroup(g.item_group)">
               <span class="size-2.5 rounded-full" :style="{ background: CHART.palette[i % CHART.palette.length] }" />
               <span class="flex-1 text-ink-200">{{ g.item_group }}</span>
               <span class="num text-ink-400">{{ percent(groupTotal ? (g.revenue / groupTotal) * 100 : 0) }}</span>
+              </button>
             </li>
           </ul>
         </template>
@@ -271,33 +291,7 @@ const orderType = (remarks: string | null) => remarks?.split(' | ')[0] || 'سف�
     </div>
 
     <div class="grid gap-6 xl:grid-cols-3">
-      <Panel title="ساعات شلوغی" subtitle="ضربان کافه در ۲۴ ساعت" class="xl:col-span-2">
-        <div v-if="data" class="flex flex-col items-center gap-8 md:flex-row md:justify-around">
-          <HourClock :hours="data.hourly" />
-          <div class="w-full max-w-xs">
-            <p class="mb-4 text-xs text-ink-400">ساعت‌های اوج</p>
-            <ul v-if="peakHours.length" class="space-y-4">
-              <li v-for="(h, i) in peakHours" :key="h.hour">
-                <div class="flex items-baseline justify-between text-sm">
-                  <span :class="i === 0 ? 'text-bone' : 'text-ink-200'">ساعت {{ faNumber(h.hour) }} تا {{ faNumber(h.hour + 1) }}</span>
-                  <span class="num text-ink-400">{{ faNumber(h.orders) }} سفارش</span>
-                </div>
-                <div class="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.05]">
-                  <div
-                    class="h-full rounded-full transition-all duration-1000"
-                    :class="i === 0 ? 'bg-one-500 shadow-[0_0_10px_rgba(255,79,26,0.8)]' : 'bg-bone/35'"
-                    :style="{ width: `${(h.orders / peakMax) * 100}%` }"
-                  />
-                </div>
-              </li>
-            </ul>
-            <p v-else class="text-sm text-ink-500">هنوز سفارشی نیست.</p>
-          </div>
-        </div>
-        <div v-else class="h-72 animate-pulse rounded-xl bg-white/[0.02]" />
-      </Panel>
-
-      <Panel title="پرفروش‌ترین‌ها">
+      <Panel title="پرفروش‌ترین‌ها" class="xl:col-span-3">
         <ul v-if="data?.top_items.length" class="space-y-4">
           <li v-for="(item, i) in data.top_items" :key="item.item_code">
             <div class="flex items-center gap-3 text-sm">
@@ -343,7 +337,7 @@ const orderType = (remarks: string | null) => remarks?.split(' | ')[0] || 'سف�
         <EmptyState v-else :icon="PackageCheck" title="موجودی همه‌چیز کافیه" />
       </Panel>
 
-      <Panel title="روش پرداخت">
+      <Panel title="روش‌های دریافت و تسویه" subtitle="طبق اطلاعات سپهریار">
         <div v-if="data?.payments.length" class="space-y-5">
           <div class="flex h-3 overflow-hidden rounded-full bg-white/[0.05]">
             <div
@@ -362,7 +356,14 @@ const orderType = (remarks: string | null) => remarks?.split(' | ')[0] || 'سف�
             </li>
           </ul>
         </div>
-        <EmptyState v-else :icon="ReceiptText" title="پرداختی ثبت نشده" />
+        <EmptyState v-else :icon="ReceiptText" title="دریافت وجه تأییدشده‌ای ثبت نشده" />
+        <div v-if="data?.source_payments" class="mt-5 space-y-2 border-t border-white/[0.06] pt-4 text-xs text-ink-400">
+          <div class="flex justify-between"><span>ماندهٔ مشخصِ فاکتورها</span><span class="num text-amber-300">{{ toman(data.source_payments.outstanding) }} تومان</span></div>
+          <p v-if="data.source_payments.unallocated_count || data.source_payments.unknown_count" class="leading-6">
+            ماندهٔ {{ faNumber(data.source_payments.unallocated_count + data.source_payments.unknown_count) }} فاکتور نیازمند بررسی یا تطبیق در جمع بالا نیست؛ فهرست مشتری‌ها و ماندهٔ کل حساب در سفارش‌ها آمده است.
+          </p>
+          <p class="leading-6">فروش با دریافت وجه متفاوت است؛ نسیهٔ پرداخت‌نشده در روش‌های دریافت محاسبه نمی‌شود.</p>
+        </div>
       </Panel>
 
       <Panel title="آخرین سفارش‌ها">
@@ -370,16 +371,45 @@ const orderType = (remarks: string | null) => remarks?.split(' | ')[0] || 'سف�
           <RouterLink to="/orders" class="inline-flex items-center gap-1 text-xs text-ink-400 hover:text-one-400">همه <ArrowLeft class="size-3.5" /></RouterLink>
         </template>
         <ul v-if="data?.recent_orders.length" class="divide-y divide-white/[0.04]">
-          <li v-for="o in data.recent_orders" :key="o.name" class="flex items-center gap-3 py-3 text-sm">
+          <li v-for="o in data.recent_orders" :key="o.name">
+            <button class="flex w-full items-center gap-3 py-3 text-right text-sm hover:bg-white/[0.03]" @click="openOrder(o.name)">
             <div class="min-w-0 flex-1">
-              <p class="text-ink-100">{{ orderType(o.remarks) }}</p>
-              <p class="text-xs text-ink-400">{{ jShortDate(o.posting_date) }} · {{ shortTime(o.posting_time) }}</p>
+              <p class="text-ink-100">{{ o.customer_name || orderType(o.remarks) }}</p>
+              <p class="text-xs text-ink-400">{{ o.name }} · {{ o.owner_name }} · {{ jShortDate(o.posting_date) }} · {{ shortTime(o.posting_time) }}</p>
             </div>
             <span class="num" :class="o.is_return ? 'text-rose-400' : 'text-bone'">{{ toman(o.base_grand_total) }}</span>
+            </button>
           </li>
         </ul>
         <EmptyState v-else :icon="ReceiptText" title="سفارشی نیست" />
       </Panel>
     </div>
+    <Modal v-model="groupOpen" :title="`جزئیات دسته ${selectedGroup ?? ''}`" width="max-w-xl">
+      <div class="space-y-2">
+        <div v-for="item in selectedGroupItems" :key="item.item_code" class="flex items-center gap-3 border-b border-white/[0.05] py-2 text-sm">
+          <span class="min-w-0 flex-1 text-ink-100">{{ item.item_name }}</span>
+          <span class="num text-ink-400">{{ faNumber(item.qty) }} عدد</span>
+          <span class="num text-bone">{{ toman(item.revenue) }} تومان</span>
+        </div>
+        <p v-if="!selectedGroupItems.length" class="text-sm text-ink-400">جزئیاتی برای این دسته ثبت نشده است.</p>
+      </div>
+    </Modal>
+    <Modal v-model="orderOpen" :title="selectedOrder ? `جزئیات سفارش ${selectedOrder.name}` : 'جزئیات سفارش'" width="max-w-xl">
+      <div v-if="selectedOrder" class="space-y-5 text-sm">
+        <p class="text-ink-300">{{ jDate(selectedOrder.posting_date) }} · {{ shortTime(selectedOrder.posting_time) }} · ثبت‌کننده: {{ selectedOrder.owner_name }}</p>
+        <div class="space-y-2">
+          <p class="font-bold text-bone">اقلام سفارش</p>
+          <div v-for="item in selectedOrder.items" :key="item.item_code" class="flex items-center gap-3 border-b border-white/[0.05] py-2">
+            <span class="min-w-0 flex-1 text-ink-100">{{ item.item_name }}</span><span class="num text-ink-400">{{ faNumber(item.qty) }}</span><span class="num text-bone">{{ toman(item.amount) }}</span>
+          </div>
+        </div>
+        <div v-if="selectedOrder.payments.length" class="space-y-2">
+          <p class="font-bold text-bone">پرداخت‌ها</p>
+          <div v-for="(payment, i) in selectedOrder.payments" :key="i" class="flex justify-between text-ink-300"><span>{{ paymentLabel(payment.mode_of_payment) }}</span><span class="num">{{ toman(payment.amount) }}</span></div>
+        </div>
+        <p class="border-t border-white/[0.08] pt-3 font-bold text-bone">جمع: {{ toman(selectedOrder.grand_total) }} تومان</p>
+      </div>
+      <div v-else class="h-32 animate-pulse rounded-xl bg-white/[0.03]" />
+    </Modal>
   </div>
 </template>

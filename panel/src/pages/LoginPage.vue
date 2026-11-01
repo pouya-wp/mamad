@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ArrowLeft, Eye, EyeOff, LoaderCircle, TriangleAlert } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import SteamBackground from '@/components/fx/SteamBackground.vue'
 import OneLogo from '@/components/OneLogo.vue'
+import { ApiError } from '@/lib/api'
 import { sound } from '@/lib/sound'
 import { useSession } from '@/stores/session'
 
@@ -22,6 +23,19 @@ const capsLock = ref(false)
 
 const canSubmit = computed(() => usr.value.trim().length > 0 && pwd.value.length > 0 && !loading.value)
 
+let reconnectTimer: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  reconnectTimer = setInterval(async () => {
+    if (!session.bootNetworkError || loading.value) return
+    try {
+      if (await session.boot()) router.replace((route.query.next as string) || '/')
+    } catch {
+      // Keep the form usable and retry after the connection returns.
+    }
+  }, 10000)
+})
+onBeforeUnmount(() => clearInterval(reconnectTimer))
+
 // The browser's own "Please fill out this field" bubble is in English; say it in Persian.
 function requiredMessage(event: Event) {
   const input = event.target as HTMLInputElement
@@ -36,10 +50,11 @@ const trackCaps = (event: KeyboardEvent) => (capsLock.value = event.getModifierS
 
 /** Frappe's messages are English and technical; say what actually happened. */
 function reason(problem: unknown) {
+  if (problem instanceof ApiError && problem.status === 401) return 'نام کاربری یا رمز عبور درست نیست.'
   const text = problem instanceof Error ? problem.message : String(problem)
   if (/invalid|incorrect|not allowed|authentication/i.test(text)) return 'نام کاربری یا رمز عبور درست نیست.'
   if (/disabled|inactive/i.test(text)) return 'این حساب غیرفعال است.'
-  if (/fetch|network|failed to|502|503|504/i.test(text)) return 'به سرور کافه وصل نشدم. بکند بالا هست؟'
+  if (/fetch|network|failed to|abort|timeout|502|503|504/i.test(text)) return 'اتصال به سرور برقرار نشد. اینترنت را بررسی کن و دوباره تلاش کن.'
   return text || 'ورود انجام نشد.'
 }
 

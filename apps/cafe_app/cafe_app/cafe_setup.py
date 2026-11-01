@@ -103,9 +103,19 @@ def ensure_expense_accounts(company):
 
 def create_pos_profile(company, customer):
 	company_doc = frappe.get_cached_doc("Company", company)
-	warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse") or frappe.db.get_value(
-		"Warehouse", {"company": company, "is_group": 0, "warehouse_name": "Stores"}, "name"
-	)
+	warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	if not warehouse:
+		# ERPNext translates its default warehouse names for Persian sites.
+		for name in ("Stores", "مغازه ها"):
+			warehouse = frappe.db.get_value(
+				"Warehouse", {"company": company, "is_group": 0, "warehouse_name": name}, "name"
+			)
+			if warehouse:
+				break
+	if not warehouse:
+		warehouse = frappe.db.get_value(
+			"Warehouse", {"company": company, "is_group": 0}, "name", order_by="lft asc"
+		)
 
 	frappe.get_doc(
 		{

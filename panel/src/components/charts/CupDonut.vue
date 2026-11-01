@@ -6,6 +6,7 @@ import { sound } from '@/lib/sound'
 
 /** Category share drawn as the crema ring of a coffee cup seen from above. */
 const props = defineProps<{ groups: { item_group: string; revenue: number }[]; palette: string[] }>()
+const emit = defineEmits<{ select: [group: string] }>()
 
 const ready = ref(false)
 const hovered = ref<number | null>(null)
@@ -69,6 +70,7 @@ function enter(i: number) {
       class="cup-arc cursor-pointer"
       :style="{ opacity: hovered !== null && hovered !== i ? 0.35 : 0.92, transitionDelay: ready ? '0ms' : `${i * 90}ms` }"
       @pointerenter="enter(i)"
+      @click="emit('select', props.groups[i].item_group)"
     />
 
     <!-- a faint latte-art swirl -->

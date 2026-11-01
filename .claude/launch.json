@@ -4,8 +4,30 @@
     {
       "name": "panel",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "panel", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "panel",
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "panel-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "panel/node_modules/vite/bin/vite.js",
+        "preview",
+        "panel",
+        "--mode",
+        "demo",
+        "--outDir",
+        "C:/Users/Pouya/AppData/Local/Temp/claude/C--Users-Pouya-Desktop-PROJECTS-mamad/cf426abf-9d69-4000-b766-d066afee91c5/scratchpad/demo-dist",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
     }
   ]
 }

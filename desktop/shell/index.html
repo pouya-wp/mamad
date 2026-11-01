@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ONE CAFE</title>
+  <link rel="stylesheet" href="./shell.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand" aria-label="ONE CAFE">
+      <svg viewBox="0 0 132 48" fill="none" aria-hidden="true"><circle cx="22" cy="24" r="17" stroke="currentColor" stroke-width="2.6"/><path d="M50 41V7l26 34" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M78 41V7l-6 5" stroke="#ff4f1a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M92 26h30c0-9-6.7-15-15-15s-15 6.7-15 15 6.7 15 15 15c5 0 9-2 12-5.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>ONE CAFE <small>DESKTOP</small></span>
+    </div>
+    <div class="drag-space"></div>
+    <div class="status"><i id="status-dot"></i><span id="status-text">در حال اتصال</span></div>
+    <button id="settings-button" class="settings-button" title="تنظیمات ورود فروش" aria-label="تنظیمات ورود فروش"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/></svg></button>
+    <div class="traffic" dir="ltr">
+      <button class="light close" data-action="close" title="بستن پنجره؛ همگام‌سازی در پس‌زمینه ادامه دارد" aria-label="بستن پنجره"><span>×</span></button>
+      <button class="light minimize" data-action="minimize" title="کوچک کردن" aria-label="کوچک کردن"><span>−</span></button>
+      <button class="light maximize" data-action="maximize" title="تمام صفحه" aria-label="تمام صفحه"><span>⌗</span></button>
+    </div>
+  </header>
+  <section id="settings" class="settings" hidden>
+    <div class="settings-copy">
+      <p class="eyebrow">اتصال نرم‌افزار فروش</p>
+      <h1>اتصال سپهریار</h1>
+      <p>بعد از ورود به پنل، محصولات و فروش‌های ثبت‌شده در پایگاه فعلی سپهریار از SQL Server همین کامپیوتر خوانده می‌شوند؛ سپس فروش‌های جدید هر دقیقه بررسی می‌شوند. بستن پنجره، همگام‌سازی را در پس‌زمینه ادامه می‌دهد.</p>
+    </div>
+    <div class="source-card">
+      <div class="source-header"><span>وضعیت همگام‌سازی</span><span id="import-badge" class="badge">در انتظار ورود</span></div>
+      <div id="sync-source" class="folder-path" dir="ltr">.\SEPANDYAR2014 / Sepand_One_1405</div>
+      <div class="source-actions"><button id="sync-now" class="primary">همگام‌سازی الآن</button><span id="sync-counts" class="sync-counts"></span></div>
+      <p id="sync-detail" class="privacy">آخرین همگام‌سازی هنوز انجام نشده است.</p>
+      <p id="remote-detail" class="privacy">مدیریت از راه دور: در انتظار ثبت دستگاه</p>
+    </div>
+  </section>
+  <script src="./shell.js"></script>
+</body>
+</html>

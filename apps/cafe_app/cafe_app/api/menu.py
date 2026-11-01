@@ -2,12 +2,23 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from cafe_app import recipes
+from cafe_app.access import buyer_scopes, is_manager, require_manager, require_recipe_access
+from cafe_app.api import buyer_activity
+from cafe_app.source_catalog import UNVERIFIED_LEGACY_ITEMS, is_source_menu_item
 from cafe_app.utils import MENU_ROOT, get_cafe_settings, ingredient_groups, menu_groups
 
 
 @frappe.whitelist()
 def get_groups():
 	return {"menu": menu_groups()[1:], "ingredients": ingredient_groups()}
+
+
+def _hide_money(item):
+	"""A purchase manager keeps the recipes; what a dish costs and earns is not theirs."""
+	for field in ("rate", "cost", "margin", "unpriced"):
+		item.pop(field, None)
+	return item
 
 
 @frappe.whitelist()
@@ -19,6 +30,21 @@ def list_menu():
 		fields=["item_code", "item_name", "item_group", "image", "description", "disabled"],
 		order_by="item_group asc, item_name asc",
 	)
+	# Once an exact warehouse variant is observed, hide the older ID-only entry
+	# whose catalog name may belong to a different SepandYar warehouse.
+	variant_ids = {
+		i.item_code.rsplit("-", 1)[1]
+		for i in items
+		if i.item_code.startswith("SEPAND-") and i.item_code.count("-") == 2
+	}
+	items = [
+		i for i in items
+		if is_source_menu_item(i.item_code) and i.item_code not in UNVERIFIED_LEGACY_ITEMS and not (
+			i.item_code.startswith("SEPAND-")
+			and i.item_code.count("-") == 1
+			and i.item_code.split("-", 1)[1] in variant_ids
+		)
+	]
 	codes = [i.item_code for i in items] or [""]
 	prices = dict(
 		frappe.get_all(
@@ -28,13 +54,19 @@ def list_menu():
 			as_list=True,
 		)
 	)
-	costs = _recipe_costs(codes, settings.warehouse)
+	costs = recipes.recipe_costs(codes)
 
 	for item in items:
+		recipe = costs.get(item.item_code)
 		item.rate = flt(prices.get(item.item_code))
-		item.has_recipe = item.item_code in costs
-		item.cost = flt(costs.get(item.item_code))
+		item.has_recipe = bool(recipe)
+		item.cost = recipe["cost"] if recipe else 0
+		item.unpriced = recipe["unpriced"] if recipe else 0
 		item.margin = (item.rate - item.cost) / item.rate * 100 if item.rate else 0
+
+	if not is_manager():
+		for item in items:
+			_hide_money(item)
 	return items
 
 
@@ -42,22 +74,9 @@ def list_menu():
 def get_menu_item(item_code):
 	settings = get_cafe_settings()
 	item = frappe.get_doc("Item", item_code)
-	recipe = []
-	if frappe.db.exists("Product Bundle", {"new_item_code": item_code}):
-		bundle = frappe.get_doc("Product Bundle", {"new_item_code": item_code})
-		rates = _valuation_rates([r.item_code for r in bundle.items], settings.warehouse)
-		recipe = [
-			{
-				"item_code": r.item_code,
-				"item_name": frappe.get_cached_value("Item", r.item_code, "item_name"),
-				"qty": r.qty,
-				"uom": r.uom or frappe.get_cached_value("Item", r.item_code, "stock_uom"),
-				"rate": flt(rates.get(r.item_code)),
-			}
-			for r in bundle.items
-		]
+	recipe = recipes.get_recipe(item_code)
 
-	return {
+	detail = {
 		"item_code": item.item_code,
 		"item_name": item.item_name,
 		"item_group": item.item_group,
@@ -67,13 +86,16 @@ def get_menu_item(item_code):
 		"rate": flt(
 			frappe.db.get_value("Item Price", {"item_code": item_code, "price_list": settings.price_list}, "price_list_rate")
 		),
-		"recipe": recipe,
+		"recipe": recipe["rows"],
+		"recipe_notes": recipe["notes"],
 	}
+	return detail if is_manager() else _hide_money(detail)
 
 
 @frappe.whitelist()
 def save_menu_item(data):
-	"""Create or update a menu item together with its selling price and recipe (Product Bundle)."""
+	"""Create or update a menu item together with its selling price and recipe."""
+	require_manager()
 	data = frappe._dict(frappe.parse_json(data))
 	settings = get_cafe_settings()
 
@@ -101,8 +123,28 @@ def save_menu_item(data):
 	item.save()
 
 	_set_price(item.name, settings.price_list, flt(data.rate))
-	_set_recipe(item.name, data.recipe or [])
+	if data.recipe is not None:
+		recipes.set_recipe(item.name, data.recipe, data.recipe_notes)
 	return get_menu_item(item.name)
+
+
+@frappe.whitelist()
+def save_recipe(item_code, recipe, recipe_notes=None):
+	"""Recipe-only save: the one write a restaurant purchase manager is allowed to make.
+
+	Deliberately narrow — it touches the recipe and nothing else, so neither the
+	selling price nor anything else about the item can be changed from that desk.
+	"""
+	require_recipe_access()
+	if not frappe.db.exists("Item", item_code):
+		frappe.throw(_("این آیتم پیدا نشد"))
+	before = recipes.get_recipe(item_code) if buyer_scopes() else None
+	recipes.set_recipe(item_code, frappe.parse_json(recipe), recipe_notes)
+	if buyer_scopes():
+		item_name = frappe.db.get_value("Item", item_code, "item_name") or item_code
+		buyer_activity.log("recipe.update", "Item", item_code, None,
+			f"ویرایش رسپی {item_name}", before=before, after=recipes.get_recipe(item_code))
+	return get_menu_item(item_code)
 
 
 @frappe.whitelist()
@@ -166,58 +208,3 @@ def _set_price(item_code, price_list, rate):
 				"valid_from": "2000-01-01",
 			}
 		).insert()
-
-
-def _set_recipe(item_code, recipe):
-	rows = [r for r in recipe if r.get("item_code") and flt(r.get("qty")) > 0]
-	existing = frappe.db.get_value("Product Bundle", {"new_item_code": item_code}, "name")
-
-	if not rows:
-		if existing:
-			frappe.delete_doc("Product Bundle", existing)
-		return
-
-	bundle = frappe.get_doc("Product Bundle", existing) if existing else frappe.new_doc("Product Bundle")
-	bundle.new_item_code = item_code
-	bundle.set("items", [])
-	for r in rows:
-		bundle.append(
-			"items",
-			{
-				"item_code": r["item_code"],
-				"qty": flt(r["qty"]),
-				"uom": frappe.get_cached_value("Item", r["item_code"], "stock_uom"),
-			},
-		)
-	bundle.save()
-
-
-def _valuation_rates(item_codes, warehouse):
-	if not item_codes:
-		return {}
-	rows = frappe.db.sql(
-		"""
-		select i.item_code, coalesce(nullif(b.valuation_rate, 0), i.valuation_rate, 0) rate
-		from `tabItem` i left join `tabBin` b on b.item_code = i.item_code and b.warehouse = %(warehouse)s
-		where i.item_code in %(codes)s
-		""",
-		{"codes": item_codes, "warehouse": warehouse},
-	)
-	return dict(rows)
-
-
-def _recipe_costs(item_codes, warehouse):
-	rows = frappe.db.sql(
-		"""
-		select pb.new_item_code, pbi.item_code, pbi.qty
-		from `tabProduct Bundle` pb join `tabProduct Bundle Item` pbi on pbi.parent = pb.name
-		where pb.new_item_code in %(codes)s and pb.disabled = 0
-		""",
-		{"codes": item_codes},
-		as_dict=True,
-	)
-	rates = _valuation_rates(list({r.item_code for r in rows}), warehouse)
-	costs = {}
-	for r in rows:
-		costs[r.new_item_code] = costs.get(r.new_item_code, 0) + flt(r.qty) * flt(rates.get(r.item_code))
-	return costs

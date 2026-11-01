@@ -1,0 +1,20 @@
+{
+  "name": "one-cafe-desktop",
+  "productName": "ONE CAFE",
+  "description": "ONE CAFE Windows dashboard",
+  "author": "ONE CAFE",
+  "version": "0.3.1",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": { "start": "electron .", "dist:win": "electron-builder --win nsis", "test": "node --test test/*.test.cjs" },
+  "devDependencies": { "electron": "44.4.5", "electron-builder": "26.15.3" },
+  "build": {
+    "appId": "one.cafe.desktop",
+    "productName": "ONE CAFE",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "electronDownload": { "cache": ".cache/electron" },
+    "files": ["main.cjs", "preload.cjs", "shell/**/*", "importer/**/*", "remote/**/*", "build/icon.ico"],
+    "win": { "icon": "build/icon.ico", "target": "nsis" },
+    "nsis": { "artifactName": "ONE CAFE Setup ${version}.${ext}", "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "ONE CAFE" }
+  }
+}

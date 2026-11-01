@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import {
+  Activity,
   BookOpenText,
+  CalendarDays,
   ChartNoAxesCombined,
-  Clock3,
+  HandCoins,
   LogOut,
   Menu,
-  MonitorSmartphone,
   Package,
+  Receipt,
   ReceiptText,
   Sparkles,
   Truck,
+  UsersRound,
   Volume2,
   VolumeX,
   Wallet,
@@ -38,13 +41,13 @@ const drawer = ref(false)
 const now = ref(new Date())
 let timer: number
 
-// Grouped so eight links read as three short lists instead of one long one.
-const nav = [
+// Group the panel navigation into three short lists.
+const managerNav = [
   {
     section: 'هر روز',
     items: [
       { to: '/', label: 'داشبورد', icon: ChartNoAxesCombined },
-      { to: '/pos', label: 'صندوق', icon: MonitorSmartphone },
+      { to: '/calendar', label: 'تقویم', icon: CalendarDays },
       { to: '/orders', label: 'سفارش‌ها', icon: ReceiptText },
     ],
   },
@@ -53,17 +56,36 @@ const nav = [
     items: [
       { to: '/menu', label: 'منو و رسپی', icon: BookOpenText },
       { to: '/inventory', label: 'انبار', icon: Package },
-      { to: '/purchases', label: 'خرید و تأمین', icon: Truck },
+      { to: '/purchases', label: 'دفتر خرید', icon: Truck },
     ],
   },
   {
     section: 'مالی',
     items: [
       { to: '/accounting', label: 'حسابداری', icon: Wallet },
-      { to: '/shifts', label: 'شیفت‌ها', icon: Clock3 },
+      { to: '/expenses', label: 'هزینه‌ها', icon: HandCoins },
+      { to: '/cheques', label: 'چک‌ها', icon: Receipt },
+      { to: '/staff', label: 'پرسنل', icon: UsersRound },
     ],
   },
+  {
+    section: 'نظارت',
+    items: [{ to: '/buyer-activity', label: 'فعالیت مسئولان خرید', icon: Activity }],
+  },
 ]
+
+// Purchase managers see only their granted purchase desks and purchase calendar.
+const nav = computed(() => {
+  if (!session.isBuyer) return managerNav
+  const items = [
+    { to: '/purchases', label: 'دفتر خرید', icon: Truck },
+    { to: '/calendar', label: 'تقویم خریدها', icon: CalendarDays },
+    { to: '/expenses', label: 'هزینه‌ها', icon: HandCoins },
+  ]
+  if (session.buyerScopes.includes('Restaurant')) items.push({ to: '/menu', label: 'منو و رسپی', icon: BookOpenText })
+  const desk = session.buyerScopes.length > 1 ? 'رستوران و کافه' : session.user?.buyer_scope_label ?? ''
+  return [{ section: `خرید ${desk}`, items }]
+})
 
 // ONE CAFE is open 8:30 to 23:30; the header says so, live.
 const hours = computed(() => {
@@ -193,7 +215,7 @@ async function logout() {
           </div>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-medium text-ink-100">{{ session.user?.full_name }}</p>
-            <p class="truncate text-xs text-ink-400">{{ session.cafe?.company }}</p>
+            <p class="truncate text-xs text-ink-400">{{ session.isBuyer ? `مدیر خرید ${session.buyerScopes.length > 1 ? 'رستوران و کافه' : session.user?.buyer_scope_label}` : session.cafe?.company }}</p>
           </div>
           <button v-if="!DEMO" class="rounded-lg p-2 text-ink-400 transition hover:bg-white/5 hover:text-rose-400" title="خروج" @click="logout">
             <LogOut class="size-4" />
@@ -242,7 +264,7 @@ async function logout() {
         <span v-if="DEMO" class="hidden rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1.5 text-[11px] text-amber-300 sm:inline-block">
           نسخه نمایشی
         </span>
-        <LivePulse />
+        <LivePulse v-if="!session.isBuyer" />
         <span
           class="hidden items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-[11px] xl:flex"
           :class="hours.isOpen ? 'text-mint-400' : 'text-ink-400'"

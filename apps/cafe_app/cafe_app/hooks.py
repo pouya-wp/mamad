@@ -14,3 +14,11 @@ required_apps = ["erpnext"]
 
 after_install = "cafe_app.install.after_install"
 setup_wizard_complete = "cafe_app.install.setup_wizard_complete"
+
+after_migrate = ["cafe_app.access.ensure_roles"]
+
+# Purchase managers may reach purchasing and selected recipe APIs.
+before_request = ["cafe_app.access.restrict_buyers"]
+
+# Revoke the persistent desktop device cookie on an explicit panel logout.
+on_logout = "cafe_app.api.session.forget_desktop"

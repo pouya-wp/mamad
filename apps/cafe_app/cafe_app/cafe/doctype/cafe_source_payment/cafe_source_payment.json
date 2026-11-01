@@ -1,0 +1,21 @@
+{
+ "doctype": "DocType", "name": "Cafe Source Payment", "module": "Cafe", "custom": 0,
+ "autoname": "field:source_key",
+ "field_order": ["source_key", "status", "total", "received", "outstanding", "credit", "basis", "account_balance", "methods_json", "device", "checked_at", "job"],
+ "fields": [
+  {"fieldname":"source_key","fieldtype":"Data","label":"Source Key","reqd":1,"unique":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Unknown\nUnpaid\nCredit\nPartial\nPaid\nCancelled","read_only":1},
+  {"fieldname":"total","fieldtype":"Currency","label":"Source Total","read_only":1},
+  {"fieldname":"received","fieldtype":"Currency","label":"Source Received","read_only":1},
+  {"fieldname":"outstanding","fieldtype":"Currency","label":"Source Outstanding","read_only":1},
+  {"fieldname":"credit","fieldtype":"Currency","label":"Original Credit","read_only":1},
+  {"fieldname":"basis","fieldtype":"Select","label":"Settlement Basis","options":"Invoice\nCustomer Account\nUnallocated","read_only":1},
+  {"fieldname":"account_balance","fieldtype":"Currency","label":"Customer Account Balance","read_only":1},
+  {"fieldname":"methods_json","fieldtype":"Long Text","label":"Source Payment Snapshot","read_only":1},
+  {"fieldname":"device","fieldtype":"Link","label":"Device","options":"Cafe Desktop Device","read_only":1},
+  {"fieldname":"checked_at","fieldtype":"Datetime","label":"Checked At","read_only":1},
+  {"fieldname":"job","fieldtype":"Link","label":"Source Job","options":"Cafe Desktop Job","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1}],
+ "sort_field":"checked_at","sort_order":"DESC"
+}

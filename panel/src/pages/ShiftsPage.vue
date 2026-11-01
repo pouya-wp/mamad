@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Clock3, LoaderCircle, MonitorSmartphone } from 'lucide-vue-next'
+import { Clock3, LoaderCircle } from 'lucide-vue-next'
 import { onMounted } from 'vue'
 
 import EmptyState from '@/components/EmptyState.vue'
@@ -19,7 +19,6 @@ const diffTone = (d: number | null) => (d === null ? 'text-ink-500' : d === 0 ? 
     <div class="flex items-center gap-3">
       <p class="text-sm text-ink-400">هر صندوقدار شیفتش را با موجودی نقد باز می‌کند و با شمارش صندوق می‌بندد؛ مغایرت اینجا دیده می‌شود.</p>
       <div class="flex-1" />
-      <RouterLink to="/pos" class="btn-primary"><MonitorSmartphone class="size-4" /> رفتن به صندوق</RouterLink>
     </div>
 
     <div class="card overflow-hidden">

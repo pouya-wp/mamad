@@ -1,0 +1,22 @@
+{
+ "doctype": "DocType",
+ "name": "Cafe Desktop Device",
+ "module": "Cafe",
+ "custom": 0,
+ "autoname": "field:token_hash",
+ "field_order": ["machine_name", "enrolled_by", "enabled", "last_seen", "app_version", "token_hash"],
+ "fields": [
+  { "fieldname": "machine_name", "fieldtype": "Data", "label": "Machine Name", "reqd": 1, "in_list_view": 1 },
+  { "fieldname": "enrolled_by", "fieldtype": "Link", "label": "Enrolled By", "options": "User", "read_only": 1 },
+  { "fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "1", "in_list_view": 1 },
+  { "fieldname": "last_seen", "fieldtype": "Datetime", "label": "Last Seen", "read_only": 1 },
+  { "fieldname": "app_version", "fieldtype": "Data", "label": "App Version", "read_only": 1 },
+  { "fieldname": "token_hash", "fieldtype": "Data", "label": "Token Hash", "reqd": 1, "unique": 1, "hidden": 1, "read_only": 1 }
+ ],
+ "permissions": [
+  { "role": "System Manager", "read": 1, "write": 1, "delete": 1 }
+ ],
+ "sort_field": "last_seen",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

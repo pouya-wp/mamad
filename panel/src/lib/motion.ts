@@ -8,7 +8,8 @@ export const fxLite = (() => {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const weakCpu = (navigator.hardwareConcurrency ?? 8) <= 4
   const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
-  return reduced || weakCpu || saveData
+  const desktopShell = navigator.userAgent.includes('ONECAFE/')
+  return reduced || weakCpu || saveData || desktopShell
 })()
 
 /** Pointer position normalised to 0..1 (y up), read by the WebGL shaders. */

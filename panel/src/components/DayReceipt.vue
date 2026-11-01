@@ -48,7 +48,7 @@ function print() {
 
         <template v-if="data.payments.length">
           <div class="receipt-rule my-2.5" />
-          <p class="ink-soft text-[10px]">روش پرداخت</p>
+          <p class="ink-soft text-[10px]">روش‌های دریافت و تسویه</p>
           <div v-for="p in data.payments" :key="p.mode_of_payment" class="receipt-row">
             <span>{{ paymentLabel(p.mode_of_payment) }}</span>
             <span class="dots" />
